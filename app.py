@@ -8,6 +8,7 @@ import sys
 import json
 import hashlib
 import shutil
+import subprocess
 import re
 import time
 import threading
@@ -30,6 +31,8 @@ app = Flask(__name__, static_folder=None)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(BASE_DIR, 'config.json')
 LOG_PATH = os.path.join(BASE_DIR, 'operation_log.txt')
+SCAN_CACHE_PATH = os.path.join(BASE_DIR, 'scan_cache.json')
+ORGANIZE_CACHE_PATH = os.path.join(BASE_DIR, 'organize_cache.json')
 
 # ─── Default config ───
 DEFAULT_CONFIG = {
@@ -71,6 +74,7 @@ scan_state = {
     "current_path": "",
     "result": None,
     "error": None,
+    "cancel": False,
 }
 scan_lock = threading.Lock()
 
@@ -82,6 +86,7 @@ organize_state = {
     "current_path": "",
     "result": None,
     "error": None,
+    "cancel": False,
 }
 organize_lock = threading.Lock()
 
@@ -114,12 +119,35 @@ def save_config(cfg):
         json.dump(cfg, f, ensure_ascii=False, indent=2)
 
 
+LOG_MAX_BYTES = 2 * 1024 * 1024    # rotate when log exceeds 2 MB
+LOG_KEEP_BYTES = 1 * 1024 * 1024   # keep the newest 1 MB after rotation
+
+
+def _rotate_log_if_needed():
+    try:
+        if not os.path.exists(LOG_PATH) or os.path.getsize(LOG_PATH) <= LOG_MAX_BYTES:
+            return
+        with open(LOG_PATH, 'rb') as f:
+            f.seek(-LOG_KEEP_BYTES, os.SEEK_END)
+            tail = f.read().decode('utf-8', errors='replace')
+        # Drop the first partial line
+        nl = tail.find('\n')
+        if nl >= 0:
+            tail = tail[nl + 1:]
+        with open(LOG_PATH, 'w', encoding='utf-8') as f:
+            f.write(f"--- log rotated {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ---\n")
+            f.write(tail)
+    except Exception:
+        pass
+
+
 def log_operation(action, filepath, detail=""):
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     line = f"[{ts}] {action} | {filepath}"
     if detail:
         line += f" | {detail}"
     line += "\n"
+    _rotate_log_if_needed()
     with open(LOG_PATH, 'a', encoding='utf-8') as f:
         f.write(line)
 
@@ -132,9 +160,35 @@ def format_size(n):
     return f"{n:.1f} PB"
 
 
+def normalize_exts(exts):
+    """Normalize a user-supplied extension list.
+    Accepts 'pdf', '.pdf', '*.PDF' etc.; returns a set of lowercase '.ext'."""
+    result = set()
+    for e in exts:
+        e = str(e).strip().lower().lstrip("*").strip()
+        if not e:
+            continue
+        if not e.startswith("."):
+            e = "." + e
+        result.add(e)
+    return result
+
+
 def get_file_type_set(cfg):
-    preset = cfg.get("file_types", "work")
-    return FILE_TYPE_PRESETS.get(preset, FILE_TYPE_PRESETS["work"])
+    """Resolve the extension filter from config.
+
+    file_types may be:
+      - "all"           -> None (no filter)
+      - a list of exts  -> custom user filter (empty list = no filter)
+      - a preset name   -> legacy preset ("work", "all")
+    """
+    ft = cfg.get("file_types", "work")
+    if isinstance(ft, list):
+        exts = normalize_exts(ft)
+        return exts if exts else None
+    if ft == "all":
+        return None
+    return FILE_TYPE_PRESETS.get(ft, FILE_TYPE_PRESETS["work"])
 
 
 def md5_file(path, chunk_size=65536):
@@ -151,12 +205,73 @@ def md5_file(path, chunk_size=65536):
         return None
 
 
+def quick_hash(path, head_bytes=4096):
+    """Cheap pre-filter hash: MD5 of the first chunk only.
+    Files with different heads can never have the same full MD5."""
+    try:
+        with open(path, 'rb') as f:
+            return hashlib.md5(f.read(head_bytes)).hexdigest()
+    except Exception:
+        return None
+
+
+def group_by_hash(files, state=None):
+    """Split same-size files into duplicate groups by content.
+    Uses a head-only quick hash first; full MD5 only for head collisions."""
+    # Stage 1: head hash
+    by_head = defaultdict(list)
+    for f in files:
+        if state is not None and state.get("cancel"):
+            return []
+        qh = quick_hash(f["path"])
+        if qh:
+            by_head[qh].append(f)
+    # Stage 2: full MD5 only where heads collide
+    by_md5 = defaultdict(list)
+    for head_group in by_head.values():
+        if len(head_group) <= 1:
+            continue
+        for f in head_group:
+            if state is not None and state.get("cancel"):
+                return []
+            md5 = md5_file(f["path"])
+            if md5:
+                f["md5"] = md5
+                by_md5[md5].append(f)
+    return [v for v in by_md5.values() if len(v) > 1]
+
+
+_COPY_SUFFIX_RE = re.compile(
+    r'(?:[\s_\-]*[（(]\d+[）)]|[\s_\-]*(?:副本|拷贝|copy))+\s*$', re.IGNORECASE)
+
+
+def normalize_name(fname):
+    """Strip copy/version suffixes so '报告 (1).docx' / '报告-副本.docx'
+    group together with '报告.docx' in similar mode."""
+    base, ext = os.path.splitext(fname)
+    prev = None
+    while prev != base:
+        prev = base
+        base = _COPY_SUFFIX_RE.sub('', base)
+    return (base.strip() + ext).lower()
+
+
+def _norm_path(p):
+    """Normalize a path for comparison: absolute form + OS case rules."""
+    return os.path.normcase(os.path.normpath(p))
+
+
+def _is_under(path, root):
+    """True if `path` equals `root` or lives strictly inside it."""
+    path, root = _norm_path(path), _norm_path(root)
+    return path == root or path.startswith(root + os.sep)
+
+
 def get_folder_label(path, cfg):
     """Try to label a file path with its source folder tag."""
     for folder in cfg.get("folders", []):
-        fp = folder["path"]
-        if path.startswith(fp):
-            return folder.get("label", fp)
+        if _is_under(path, folder["path"]):
+            return folder.get("label", folder["path"])
     # Auto-detect
     pl = path.lower()
     if "wxwork" in pl or "企业微信" in path:
@@ -168,89 +283,117 @@ def get_folder_label(path, cfg):
 
 def is_protected(path, cfg):
     for pf in cfg.get("protected_folders", []):
-        if path.startswith(pf):
+        if _is_under(path, pf):
             return True
     return False
 
 
+def walk_files(base):
+    """Yield (dirpath, DirEntry) recursively via os.scandir.
+    Faster than os.walk + os.path.getsize because DirEntry caches stat info."""
+    stack = [base]
+    while stack:
+        current = stack.pop()
+        try:
+            with os.scandir(current) as it:
+                for entry in it:
+                    try:
+                        if entry.is_dir(follow_symlinks=False):
+                            stack.append(entry.path)
+                        elif entry.is_file(follow_symlinks=False):
+                            yield current, entry
+                    except OSError:
+                        continue
+        except OSError:
+            continue
+
+
 def scan_files(cfg):
-    """Scan all configured folders and return grouped duplicates."""
+    """Single-pass scan of all configured folders; returns grouped duplicates.
+    Returns None when cancelled mid-scan."""
     allowed_exts = get_file_type_set(cfg)
     min_size = cfg.get("min_size_kb", 1) * 1024
     mode = cfg.get("scan_mode", "exact")
 
     all_files = []
+    folder_stats = defaultdict(lambda: [0, 0])  # folder path -> [count, bytes]
+
     for folder in cfg.get("folders", []):
         fpath = folder["path"]
         label = folder.get("label", fpath)
         if not os.path.isdir(fpath):
             continue
-        for root, dirs, filenames in os.walk(fpath):
-            for fname in filenames:
-                scan_state["current_path"] = os.path.join(root, fname)
-                scan_state["progress"] += 1
-                _, ext = os.path.splitext(fname)
-                ext_lower = ext.lower()
-                if allowed_exts is not None and ext_lower not in allowed_exts:
-                    continue
-                try:
-                    fpath_full = os.path.normpath(os.path.join(root, fname))
-                    fsize = os.path.getsize(fpath_full)
-                    if fsize < min_size:
-                        continue
-                    mtime = os.path.getmtime(fpath_full)
-                    protected = is_protected(fpath_full, cfg)
-                    file_label = label if not protected else f"🔒 {label}"
-                    all_files.append({
-                        "id": f"f_{len(all_files)}",
-                        "name": fname,
-                        "path": fpath_full,
-                        "size": fsize,
-                        "ext": ext_lower,
-                        "mtime": mtime,
-                        "mtime_str": datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M"),
-                        "source": file_label,
-                        "protected": protected,
-                        "month": os.path.basename(root),
-                    })
-                except Exception:
-                    continue
+        for root, entry in walk_files(fpath):
+            if scan_state.get("cancel"):
+                return None
+            scan_state["current_path"] = entry.path
+            scan_state["progress"] += 1
+            try:
+                st = entry.stat(follow_symlinks=False)
+            except OSError:
+                continue
+            folder_stats[fpath][0] += 1
+            folder_stats[fpath][1] += st.st_size
+            ext_lower = os.path.splitext(entry.name)[1].lower()
+            if allowed_exts is not None and ext_lower not in allowed_exts:
+                continue
+            if st.st_size < min_size:
+                continue
+            fpath_full = os.path.normpath(entry.path)
+            protected = is_protected(fpath_full, cfg)
+            file_label = label
+            all_files.append({
+                "id": f"f_{len(all_files)}",
+                "name": entry.name,
+                "path": fpath_full,
+                "size": st.st_size,
+                "ext": ext_lower,
+                "mtime": st.st_mtime,
+                "mtime_str": datetime.fromtimestamp(st.st_mtime).strftime("%Y-%m-%d %H:%M"),
+                "source": file_label,
+                "protected": protected,
+                "month": os.path.basename(root),
+            })
+
+    # Folder stats were collected in the same pass — no separate pre-count walk
+    for fp, (cnt, size) in folder_stats.items():
+        folder_stats_cache[fp] = {"count": cnt, "size": size, "ts": time.time()}
 
     # Group by mode
     if mode == "exact":
-        groups_dict = defaultdict(list)
+        # Name (case-insensitive) + size candidates, then VERIFY by content:
+        # same name+size does not guarantee identical content, so candidate
+        # groups are split by hash before anything can be selected for delete.
+        candidates = defaultdict(list)
         for f in all_files:
-            key = (f["name"], f["size"])
-            groups_dict[key].append(f)
-        groups = [v for v in groups_dict.values() if len(v) > 1]
+            candidates[(f["name"].lower(), f["size"])].append(f)
+        groups = []
+        for files in candidates.values():
+            if len(files) > 1:
+                groups.extend(group_by_hash(files, scan_state))
 
     elif mode == "content":
-        # First group by size
+        # Group by size first, then head-hash + full MD5 verification
         size_groups = defaultdict(list)
         for f in all_files:
             size_groups[f["size"]].append(f)
-        # Only compute MD5 for groups with same size
-        groups_dict = defaultdict(list)
-        for size, files in size_groups.items():
-            if len(files) <= 1:
-                continue
-            for f in files:
-                md5 = md5_file(f["path"])
-                if md5:
-                    f["md5"] = md5
-                    groups_dict[md5].append(f)
-        groups = [v for v in groups_dict.values() if len(v) > 1]
+        groups = []
+        for files in size_groups.values():
+            if len(files) > 1:
+                groups.extend(group_by_hash(files, scan_state))
 
     elif mode == "similar":
+        # Normalized name: '报告 (1).docx' / '报告-副本.docx' group with '报告.docx'
         groups_dict = defaultdict(list)
         for f in all_files:
-            key = f["name"].lower()
-            groups_dict[key].append(f)
+            groups_dict[normalize_name(f["name"])].append(f)
         groups = [v for v in groups_dict.values() if len(v) > 1]
-        # similar mode: just pass groups, is_similar computed later
 
     else:
         groups = []
+
+    if scan_state.get("cancel"):
+        return None
 
     # Build result
     result_groups = []
@@ -262,10 +405,10 @@ def scan_files(cfg):
         # Determine if similar (different sizes)
         sizes = set(f["size"] for f in grp)
         is_similar = len(sizes) > 1
-        # Keep the first (oldest) as suggested-keep
+        # The first (oldest) file is the one the UI marks as 建议保留,
+        # so savings must be computed against keeping THAT file.
         group_size = sum(f["size"] for f in grp)
-        single_size = grp[0]["size"] if not is_similar else max(f["size"] for f in grp)
-        savings = group_size - min(f["size"] for f in grp)
+        savings = group_size - grp[0]["size"]
         total_dup_files += len(grp)
         total_savings += savings
         result_groups.append({
@@ -294,6 +437,24 @@ def scan_files(cfg):
     }
 
 
+def save_cache(path, data):
+    try:
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False)
+    except Exception:
+        pass
+
+
+def load_cache(path):
+    try:
+        if os.path.exists(path):
+            with open(path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return None
+
+
 def scan_thread(cfg):
     try:
         scan_state["scanning"] = True
@@ -301,27 +462,11 @@ def scan_thread(cfg):
         scan_state["total"] = 0
         scan_state["error"] = None
         scan_state["result"] = None
-        # Pre-count and update folder stats cache
-        allowed_exts = get_file_type_set(cfg)
-        min_size = cfg.get("min_size_kb", 1) * 1024
-        for folder in cfg.get("folders", []):
-            fpath = folder["path"]
-            if not os.path.isdir(fpath):
-                continue
-            f_count, f_size = 0, 0
-            for root, dirs, filenames in os.walk(fpath):
-                for fname in filenames:
-                    scan_state["total"] += 1
-                    try:
-                        fp = os.path.join(root, fname)
-                        f_count += 1
-                        f_size += os.path.getsize(fp)
-                    except Exception:
-                        pass
-            folder_stats_cache[fpath] = {"count": f_count, "size": f_size, "ts": time.time()}
-        # Scan
+        scan_state["cancel"] = False
         result = scan_files(cfg)
-        scan_state["result"] = result
+        if result is not None:  # None = cancelled
+            scan_state["result"] = result
+            save_cache(SCAN_CACHE_PATH, result)
     except Exception as e:
         scan_state["error"] = str(e)
     finally:
@@ -348,55 +493,50 @@ def organize_scan_thread(cfg):
         organize_state["total"] = 0
         organize_state["error"] = None
         organize_state["result"] = None
+        organize_state["cancel"] = False
 
         allowed_exts = set(cfg.get("organize_exts", ORGANIZE_DEFAULT_EXTS))
         keywords_cfg = cfg.get("organize_keywords", {})
 
-        # Pre-count
-        for folder in cfg.get("folders", []):
-            fpath = folder["path"]
-            if not os.path.isdir(fpath):
-                continue
-            for root, dirs, filenames in os.walk(fpath):
-                for fname in filenames:
-                    organize_state["total"] += 1
-
+        # Single-pass scan (no pre-count walk)
         all_files = []
         for folder in cfg.get("folders", []):
             fpath = folder["path"]
             label = folder.get("label", fpath)
             if not os.path.isdir(fpath):
                 continue
-            for root, dirs, filenames in os.walk(fpath):
-                for fname in filenames:
-                    organize_state["current_path"] = os.path.join(root, fname)
-                    organize_state["progress"] += 1
-                    _, ext = os.path.splitext(fname)
-                    ext_lower = ext.lower()
-                    if ext_lower not in allowed_exts:
-                        continue
-                    try:
-                        fpath_full = os.path.normpath(os.path.join(root, fname))
-                        fsize = os.path.getsize(fpath_full)
-                        mtime = os.path.getmtime(fpath_full)
-                        category = classify_file(fname, keywords_cfg)
-                        protected = is_protected(fpath_full, cfg)
-                        file_label = label if not protected else f"🔒 {label}"
-                        all_files.append({
-                            "id": f"o_{len(all_files)}",
-                            "name": fname,
-                            "path": fpath_full,
-                            "size": fsize,
-                            "ext": ext_lower,
-                            "mtime": mtime,
-                            "mtime_str": datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M"),
-                            "source": file_label,
-                            "protected": protected,
-                            "category": category,
-                            "month": os.path.basename(root),
-                        })
-                    except Exception:
-                        continue
+            for root, entry in walk_files(fpath):
+                if organize_state.get("cancel"):
+                    return
+                organize_state["current_path"] = entry.path
+                organize_state["progress"] += 1
+                ext_lower = os.path.splitext(entry.name)[1].lower()
+                if ext_lower not in allowed_exts:
+                    continue
+                try:
+                    st = entry.stat(follow_symlinks=False)
+                    fpath_full = os.path.normpath(entry.path)
+                    category = classify_file(entry.name, keywords_cfg)
+                    protected = is_protected(fpath_full, cfg)
+                    file_label = label
+                    all_files.append({
+                        "id": f"o_{len(all_files)}",
+                        "name": entry.name,
+                        "path": fpath_full,
+                        "size": st.st_size,
+                        "ext": ext_lower,
+                        "mtime": st.st_mtime,
+                        "mtime_str": datetime.fromtimestamp(st.st_mtime).strftime("%Y-%m-%d %H:%M"),
+                        "source": file_label,
+                        "protected": protected,
+                        "category": category,
+                        "month": os.path.basename(root),
+                    })
+                except Exception:
+                    continue
+
+        if organize_state.get("cancel"):
+            return
 
         # Group by category
         categories_dict = defaultdict(list)
@@ -427,6 +567,7 @@ def organize_scan_thread(cfg):
             "total_categories": len(result_categories),
             "scan_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         }
+        save_cache(ORGANIZE_CACHE_PATH, organize_state["result"])
     except Exception as e:
         organize_state["error"] = str(e)
     finally:
@@ -441,12 +582,27 @@ def index():
     return send_file(html_path)
 
 
+@app.route('/style.css')
+def style_css():
+    return send_file(os.path.join(BASE_DIR, 'style.css'), mimetype='text/css')
+
+
+@app.route('/app.js')
+def app_js():
+    return send_file(os.path.join(BASE_DIR, 'app.js'), mimetype='application/javascript')
+
+
 @app.route('/api/config', methods=['GET'])
 def get_config():
     cfg = load_config()
     # Don't return api_key in full
     safe = dict(cfg)
     safe["api_key"] = "***" if cfg.get("api_key") else ""
+    # Expose the built-in default extension list so the UI can offer
+    # "restore defaults" without hardcoding it in the frontend.
+    safe["file_type_defaults"] = sorted(FILE_TYPE_PRESETS["work"])
+    # Let the UI warn when deletes would bypass the recycle bin
+    safe["has_send2trash"] = HAS_SEND2TRASH
     return jsonify(safe)
 
 
@@ -457,6 +613,16 @@ def update_config():
     for k in ["api_key", "api_base", "api_model", "scan_mode", "min_size_kb", "file_types", "organize_keywords", "organize_exts"]:
         if k in data:
             if k == "api_key" and data[k] == "***":
+                continue
+            if k == "file_types":
+                v = data[k]
+                if isinstance(v, list):
+                    # Custom user-entered extension list
+                    cfg[k] = sorted(normalize_exts(v))
+                elif v in ("all", "work"):
+                    cfg[k] = v
+                else:
+                    cfg[k] = "work"
                 continue
             cfg[k] = data[k]
     save_config(cfg)
@@ -556,6 +722,34 @@ def toggle_protect():
     return jsonify({"ok": True, "protected": path in cfg["protected_folders"]})
 
 
+@app.route('/api/open', methods=['POST'])
+def open_path():
+    """Open a file with its default app, or reveal it in Explorer.
+
+    Security: the path must live inside one of the configured scan folders —
+    the same boundary enforced for delete/move operations.
+    """
+    data = request.json or {}
+    path = data.get("path", "")
+    dir_mode = bool(data.get("dir"))
+    if not path:
+        return jsonify({"error": "缺少路径"}), 400
+    path = os.path.normpath(path)
+    cfg = load_config()
+    if not any(_is_under(path, f["path"]) for f in cfg.get("folders", [])):
+        return jsonify({"error": "路径不在已配置的文件夹内"}), 403
+    if not os.path.exists(path):
+        return jsonify({"error": "文件不存在（可能已被移动或删除）"}), 404
+    try:
+        if dir_mode:
+            subprocess.Popen(["explorer", "/select,", path])
+        else:
+            os.startfile(path)
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route('/api/presets', methods=['GET'])
 def get_presets():
     """Return common WeChat/WXWork paths if they exist."""
@@ -595,10 +789,21 @@ def scan_status():
     })
 
 
+@app.route('/api/scan/cancel', methods=['POST'])
+def cancel_scan():
+    scan_state["cancel"] = True
+    return jsonify({"ok": True})
+
+
 @app.route('/api/scan/result', methods=['GET'])
 def scan_result():
     if scan_state["result"]:
         return jsonify(scan_state["result"])
+    # Fall back to the last persisted scan so a restart doesn't lose results
+    cached = load_cache(SCAN_CACHE_PATH)
+    if cached:
+        scan_state["result"] = cached
+        return jsonify(cached)
     return jsonify({"groups": [], "total_files": 0})
 
 
@@ -614,6 +819,14 @@ def operate():
     if action not in ("delete", "move"):
         return jsonify({"error": "无效操作"}), 400
 
+    if action == "move":
+        if not dest_dir:
+            return jsonify({"error": "目标文件夹无效"}), 400
+        try:
+            os.makedirs(dest_dir, exist_ok=True)  # auto-create (e.g. per-category folders)
+        except Exception as e:
+            return jsonify({"error": f"无法创建目标文件夹: {e}"}), 400
+
     results = []
     for fpath in files:
         fpath = os.path.normpath(fpath)
@@ -621,28 +834,22 @@ def operate():
             results.append({"path": fpath, "ok": False, "error": "文件不存在"})
             continue
         # Path safety check
-        in_config = False
-        for folder in cfg["folders"]:
-            norm_folder = os.path.normpath(folder["path"])
-            if fpath.startswith(norm_folder + os.sep) or fpath == norm_folder:
-                in_config = True
-                break
+        in_config = any(_is_under(fpath, folder["path"]) for folder in cfg["folders"])
         if not in_config:
             results.append({"path": fpath, "ok": False, "error": "文件不在配置文件夹内"})
             continue
 
+        # Log the intent BEFORE the destructive action, so a crash mid-way
+        # still leaves a record of what was attempted.
+        log_operation(action.upper(), fpath, f"-> {dest_dir}" if action == "move" else "")
         try:
             if action == "delete":
                 if HAS_SEND2TRASH:
                     send2trash(fpath)
                 else:
                     os.remove(fpath)
-                log_operation("DELETE", fpath)
                 results.append({"path": fpath, "ok": True, "action": "deleted"})
             elif action == "move":
-                if not dest_dir or not os.path.isdir(dest_dir):
-                    results.append({"path": fpath, "ok": False, "error": "目标文件夹无效"})
-                    continue
                 fname = os.path.basename(fpath)
                 dest_path = os.path.join(dest_dir, fname)
                 # Auto-add suffix if exists
@@ -653,7 +860,6 @@ def operate():
                         dest_path = os.path.join(dest_dir, f"{base} ({i}){ext}")
                         i += 1
                 shutil.move(fpath, dest_path)
-                log_operation("MOVE", fpath, f"-> {dest_path}")
                 results.append({"path": fpath, "ok": True, "action": "moved", "dest": dest_path})
         except Exception as e:
             log_operation("ERROR", fpath, str(e))
@@ -842,10 +1048,21 @@ def organize_status():
     })
 
 
+@app.route('/api/organize/cancel', methods=['POST'])
+def cancel_organize():
+    organize_state["cancel"] = True
+    return jsonify({"ok": True})
+
+
 @app.route('/api/organize/result', methods=['GET'])
 def organize_result():
     if organize_state["result"]:
         return jsonify(organize_state["result"])
+    # Fall back to the last persisted result so a restart doesn't lose it
+    cached = load_cache(ORGANIZE_CACHE_PATH)
+    if cached:
+        organize_state["result"] = cached
+        return jsonify(cached)
     return jsonify({"categories": [], "total_files": 0})
 
 
@@ -887,17 +1104,19 @@ def export_data():
         )
     elif fmt == "csv":
         import io
-        lines = ["group_id,filename,ext,source,path,size,mtime,protected"]
+        import csv
+        text_buf = io.StringIO()
+        writer = csv.writer(text_buf)
+        writer.writerow(["group_id", "filename", "ext", "source", "path", "size", "mtime", "protected"])
         for g in data["groups"]:
             for f in g["files"]:
-                lines.append(
-                    f"{g['group_id']},{f['name']},{f['ext']},{f['source']},"
-                    f"{f['path']},{f['size']},{f['mtime_str']},"
-                    f"{'yes' if f.get('protected') else 'no'}"
-                )
-        csv_content = "\n".join(lines)
+                writer.writerow([
+                    g["group_id"], f["name"], f["ext"], f["source"],
+                    f["path"], f["size"], f["mtime_str"],
+                    "yes" if f.get("protected") else "no",
+                ])
         buf = io.BytesIO()
-        buf.write(('\ufeff' + csv_content).encode('utf-8'))
+        buf.write(('\ufeff' + text_buf.getvalue()).encode('utf-8'))
         buf.seek(0)
         return send_file(
             buf,

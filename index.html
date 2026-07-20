@@ -1,353 +1,25 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="cinnabar">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>文件整理、清理器</title>
-<style>
-:root {
-  --bg: #1a1a2e;
-  --surface: #16213e;
-  --surface2: #0f3460;
-  --border: #2a2a4a;
-  --text: #e0e0e0;
-  --text-dim: #8888aa;
-  --accent: #4e8aff;
-  --accent-hover: #6ba0ff;
-  --danger: #ff5555;
-  --danger-hover: #ff7777;
-  --warning: #ffaa33;
-  --success: #50fa7b;
-  --radius: 8px;
-  --shadow: 0 2px 12px rgba(0,0,0,.3);
-}
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
-  background: var(--bg); color: var(--text); line-height: 1.6;
-  -webkit-font-smoothing: antialiased; min-height: 100vh;
-  padding-bottom: 70px;
-}
-/* ─── Header ─── */
-.header {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 16px 24px; background: var(--surface);
-  border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 100;
-}
-.header h1 { font-size: 18px; font-weight: 600; }
-.header h1 span { color: var(--accent); }
-.header-actions { display: flex; gap: 12px; }
-.btn {
-  padding: 6px 14px; border-radius: var(--radius); border: 1px solid var(--border);
-  background: var(--surface2); color: var(--text); cursor: pointer;
-  font-size: 13px; transition: all .15s;
-}
-.btn:hover { border-color: var(--accent); }
-.btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-.btn-primary:hover { background: var(--accent-hover); }
-.btn-danger { background: var(--danger); border-color: var(--danger); color: #fff; }
-.btn-danger:hover { background: var(--danger-hover); }
-.btn-sm { padding: 4px 10px; font-size: 12px; }
-.btn:disabled { opacity: .4; cursor: not-allowed; }
-
-/* ─── Tabs ─── */
-.tabs {
-  display: flex; gap: 0; margin-bottom: 20px; border-bottom: 2px solid var(--border);
-}
-.tab {
-  padding: 10px 24px; cursor: pointer; font-size: 14px; font-weight: 500;
-  color: var(--text-dim); border-bottom: 2px solid transparent; margin-bottom: -2px;
-  transition: all .15s;
-}
-.tab:hover { color: var(--text); }
-.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
-.tab-content { display: none; }
-.tab-content.active { display: block; }
-
-/* ─── Layout ─── */
-.container { max-width: 1200px; margin: 0 auto; padding: 24px; }
-
-/* ─── Stats ─── */
-.stats {
-  display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px;
-}
-.stat-card {
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius); padding: 16px; text-align: center;
-}
-.stat-card .val { font-size: 24px; font-weight: 700; color: var(--accent); }
-.stat-card .label { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
-.stat-card.danger .val { color: var(--danger); }
-.stat-card.success .val { color: var(--success); }
-
-/* ─── Toolbar ─── */
-.toolbar {
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius); padding: 16px; margin-bottom: 20px;
-}
-.toolbar-row {
-  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
-  margin-bottom: 10px;
-}
-.toolbar-row:last-child { margin-bottom: 0; }
-.search-input, .ai-input {
-  flex: 1; min-width: 200px; padding: 8px 12px;
-  background: var(--bg); border: 1px solid var(--border);
-  border-radius: var(--radius); color: var(--text); font-size: 14px;
-  outline: none; transition: border-color .15s;
-}
-.search-input:focus, .ai-input:focus { border-color: var(--accent); }
-.filter-chips { display: flex; gap: 6px; flex-wrap: wrap; }
-.chip {
-  padding: 4px 10px; border-radius: 16px; border: 1px solid var(--border);
-  background: var(--bg); font-size: 12px; cursor: pointer; transition: all .15s;
-  color: var(--text-dim);
-}
-.chip.active { border-color: var(--accent); color: var(--accent); background: rgba(78,138,255,.1); }
-.chip:hover { border-color: var(--accent); }
-.select {
-  padding: 6px 10px; background: var(--bg); border: 1px solid var(--border);
-  border-radius: var(--radius); color: var(--text); font-size: 13px; outline: none;
-}
-.select option { background: var(--bg); }
-.quick-rules { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-.quick-rules-label { font-size: 12px; color: var(--text-dim); margin-right: 4px; }
-.ai-box {
-  display: flex; gap: 8px; align-items: center; margin-top: 10px;
-  padding-top: 10px; border-top: 1px solid var(--border);
-}
-.ai-badge {
-  font-size: 11px; padding: 2px 6px; border-radius: 4px;
-  background: rgba(78,138,255,.15); color: var(--accent); font-weight: 600;
-}
-.ai-understanding {
-  margin-top: 8px; padding: 8px 12px; background: rgba(78,138,255,.08);
-  border: 1px solid rgba(78,138,255,.2); border-radius: var(--radius);
-  font-size: 13px; color: var(--text-dim); display: none;
-}
-
-/* ─── Folder Panel ─── */
-.folder-panel {
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius); margin-bottom: 20px; overflow: hidden;
-}
-.folder-panel-header {
-  padding: 12px 16px; cursor: pointer; display: flex;
-  justify-content: space-between; align-items: center;
-}
-.folder-panel-header h2 { font-size: 14px; font-weight: 600; }
-.folder-list { padding: 0 16px 16px; }
-.folder-item {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 10px 12px; background: var(--bg); border-radius: 6px;
-  margin-bottom: 6px; font-size: 13px;
-}
-.folder-item .info { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
-.folder-item .label { font-weight: 500; }
-.folder-item .path { color: var(--text-dim); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.folder-item .meta { font-size: 12px; color: var(--text-dim); white-space: nowrap; margin-left: 8px; }
-.folder-item .actions { display: flex; gap: 6px; margin-left: 8px; }
-.protect-badge {
-  font-size: 11px; padding: 1px 5px; border-radius: 4px;
-  background: rgba(255,170,51,.15); color: var(--warning);
-}
-.add-folder-row {
-  display: flex; gap: 8px; padding: 8px 0;
-}
-.add-folder-row input {
-  flex: 1; padding: 6px 10px; background: var(--bg); border: 1px solid var(--border);
-  border-radius: 6px; color: var(--text); font-size: 13px; outline: none;
-}
-.add-folder-row input:focus { border-color: var(--accent); }
-
-/* ─── Group Cards (dedup) ─── */
-.groups { display: flex; flex-direction: column; gap: 12px; }
-.group-card {
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius); overflow: hidden;
-}
-.group-header {
-  padding: 12px 16px; display: flex; align-items: center;
-  justify-content: space-between; background: var(--surface2);
-}
-.group-header .title { display: flex; align-items: center; gap: 8px; }
-.group-header .fname { font-weight: 600; font-size: 14px; }
-.group-header .badge {
-  font-size: 10px; padding: 1px 6px; border-radius: 4px;
-  background: var(--bg); color: var(--text-dim); text-transform: uppercase;
-}
-.group-header .meta { font-size: 12px; color: var(--text-dim); }
-.group-header .savings { color: var(--success); font-weight: 600; font-size: 13px; }
-.similar-tag {
-  font-size: 11px; padding: 1px 6px; border-radius: 4px;
-  background: rgba(255,170,51,.15); color: var(--warning); margin-left: 4px;
-}
-.file-row {
-  display: flex; align-items: center; gap: 10px;
-  padding: 8px 16px 8px 40px; border-top: 1px solid var(--border);
-  font-size: 13px; transition: background .1s;
-}
-.file-row:hover { background: rgba(255,255,255,.03); }
-.file-row input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; accent-color: var(--danger); }
-.file-row .f-source {
-  font-size: 11px; padding: 1px 6px; border-radius: 4px;
-  background: var(--bg); color: var(--text-dim); white-space: nowrap;
-}
-.file-row .f-path { color: var(--text-dim); font-size: 12px; flex: 1; min-width: 0;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.file-row .f-size { color: var(--text-dim); font-size: 12px; white-space: nowrap; }
-.file-row .f-date { color: var(--text-dim); font-size: 12px; white-space: nowrap; width: 110px; }
-.file-row .f-protected { color: var(--warning); font-size: 14px; }
-.file-row .keep-tag {
-  font-size: 11px; padding: 1px 6px; border-radius: 4px;
-  background: rgba(80,250,123,.1); color: var(--success);
-}
-
-/* ─── Category Cards (organize) ─── */
-.category-card {
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius); overflow: hidden;
-}
-.category-header {
-  padding: 12px 16px; display: flex; align-items: center;
-  justify-content: space-between; background: var(--surface2);
-  cursor: pointer;
-}
-.category-header .title { display: flex; align-items: center; gap: 8px; }
-.category-header .cname { font-weight: 600; font-size: 14px; }
-.category-header .badge {
-  font-size: 10px; padding: 1px 6px; border-radius: 4px;
-  background: var(--bg); color: var(--text-dim);
-}
-.category-header .meta { font-size: 12px; color: var(--text-dim); }
-.category-header .size { color: var(--accent); font-weight: 600; font-size: 13px; }
-.category-body { display: none; }
-.category-body.expanded { display: block; }
-
-/* ─── Action Bar ─── */
-.action-bar {
-  position: fixed; bottom: 0; left: 0; right: 0;
-  background: var(--surface2); border-top: 1px solid var(--accent);
-  padding: 12px 24px; display: none; align-items: center;
-  justify-content: space-between; z-index: 200; box-shadow: 0 -4px 20px rgba(0,0,0,.4);
-}
-.action-bar.show { display: flex; }
-.action-bar .info { font-size: 14px; }
-.action-bar .info .count { font-weight: 700; color: var(--danger); }
-.action-bar .info .size { color: var(--text-dim); margin-left: 8px; }
-.action-bar .actions { display: flex; gap: 8px; }
-
-/* ─── Progress ─── */
-.progress-overlay {
-  position: fixed; inset: 0; background: rgba(0,0,0,.7); z-index: 300;
-  display: none; align-items: center; justify-content: center;
-}
-.progress-overlay.show { display: flex; }
-.progress-box {
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius); padding: 32px; text-align: center; min-width: 300px;
-}
-.progress-bar {
-  height: 6px; background: var(--bg); border-radius: 3px;
-  overflow: hidden; margin: 16px 0;
-}
-.progress-bar .fill {
-  height: 100%; background: var(--accent); width: 0%; transition: width .2s;
-}
-.progress-text { font-size: 13px; color: var(--text-dim); }
-
-/* ─── Modal ─── */
-.modal-overlay {
-  position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 250;
-  display: none; align-items: center; justify-content: center;
-}
-.modal-overlay.show { display: flex; }
-.modal {
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius); padding: 24px; min-width: 400px; max-width: 500px;
-}
-.modal h3 { margin-bottom: 16px; font-size: 16px; }
-.modal .desc { color: var(--text-dim); font-size: 13px; margin-bottom: 16px; }
-.modal .modal-actions {
-  display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px;
-}
-.modal input[type="text"] {
-  width: 100%; padding: 8px 12px; background: var(--bg);
-  border: 1px solid var(--border); border-radius: 6px; color: var(--text);
-  font-size: 14px; outline: none;
-}
-.modal input[type="text"]:focus { border-color: var(--accent); }
-
-/* ─── Settings ─── */
-.settings-panel {
-  display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6);
-  z-index: 250; align-items: center; justify-content: center;
-}
-.settings-panel.show { display: flex; }
-.settings-box {
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius); padding: 24px; min-width: 450px; max-width: 560px;
-  max-height: 80vh; overflow-y: auto;
-}
-.settings-box h3 { margin-bottom: 16px; }
-.setting-row { margin-bottom: 14px; }
-.setting-row label { display: block; font-size: 13px; color: var(--text-dim); margin-bottom: 4px; }
-.setting-row input, .setting-row select {
-  width: 100%; padding: 8px 12px; background: var(--bg);
-  border: 1px solid var(--border); border-radius: 6px; color: var(--text);
-  font-size: 14px; outline: none;
-}
-.setting-row input:focus, .setting-row select:focus { border-color: var(--accent); }
-.setting-section {
-  margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border);
-}
-.setting-section h4 { font-size: 14px; margin-bottom: 12px; color: var(--accent); }
-.keyword-row {
-  display: flex; gap: 8px; align-items: center; margin-bottom: 8px;
-}
-.keyword-row input {
-  flex: 1; padding: 6px 10px; background: var(--bg); border: 1px solid var(--border);
-  border-radius: 6px; color: var(--text); font-size: 13px; outline: none;
-}
-.keyword-row .cat-name { font-size: 13px; font-weight: 500; min-width: 80px; }
-.keyword-row .kw-input { flex: 1; }
-
-/* ─── Toast ─── */
-.toast {
-  position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%);
-  background: var(--surface2); border: 1px solid var(--border);
-  border-radius: var(--radius); padding: 10px 20px; font-size: 14px;
-  z-index: 300; opacity: 0; transition: opacity .3s; pointer-events: none;
-}
-.toast.show { opacity: 1; }
-.toast.success { border-color: var(--success); }
-.toast.error { border-color: var(--danger); }
-
-/* ─── Empty state ─── */
-.empty {
-  text-align: center; padding: 60px 20px; color: var(--text-dim);
-}
-.empty .icon { font-size: 48px; margin-bottom: 12px; opacity: .5; }
-.empty .hint { font-size: 13px; margin-top: 8px; }
-
-/* ─── Collapsed ─── */
-.collapsed { display: none !important; }
-
-/* scrollbar */
-::-webkit-scrollbar { width: 8px; }
-::-webkit-scrollbar-track { background: var(--bg); }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
-</style>
+<title>归置檔 · Dedup</title>
+<link rel="stylesheet" href="/style.css?v=3">
 </head>
 <body>
 
 <div class="header">
-  <h1>📁 <span>文件整理</span>、清理器</h1>
+  <h1>归置檔<span class="wordmark-en">DEDUP</span></h1>
   <div class="header-actions">
-    <button class="btn btn-sm" onclick="exportData('json')">导出JSON</button>
-    <button class="btn btn-sm" onclick="exportData('csv')">导出CSV</button>
+    <div class="theme-switcher">
+      <button class="theme-dot" data-theme-choice="cinnabar" style="--dot:#c8432b" title="朱砂"></button>
+      <button class="theme-dot" data-theme-choice="indigo" style="--dot:#2e4756" title="玄青"></button>
+      <button class="theme-dot" data-theme-choice="pine" style="--dot:#3f6b4f" title="墨绿"></button>
+    </div>
+    <button class="btn btn-sm" onclick="exportData('json')">导出 JSON</button>
+    <button class="btn btn-sm" onclick="exportData('csv')">导出 CSV</button>
     <button class="btn btn-sm" onclick="showLog()">日志</button>
-    <button class="btn btn-sm" onclick="showSettings()">⚙️ 设置</button>
+    <button class="btn btn-sm" onclick="showSettings()">设置</button>
   </div>
 </div>
 
@@ -356,14 +28,14 @@ body {
   <!-- Folder Panel (shared) -->
   <div class="folder-panel">
     <div class="folder-panel-header" onclick="toggleFolderPanel()">
-      <h2>📁 扫描文件夹</h2>
+      <h2>扫描文件夹</h2>
       <span id="folderToggle">▾</span>
     </div>
     <div class="folder-list" id="folderList">
       <div class="add-folder-row">
-        <input type="text" id="folderPath" placeholder="粘贴文件夹路径或点浏览...">
-        <input type="text" id="folderLabel" placeholder="标签(可选)" style="max-width:120px">
-        <button class="btn btn-sm" onclick="pickFolder()">📂 浏览</button>
+        <input type="text" id="folderPath" placeholder="粘贴文件夹路径，或点击浏览…">
+        <input type="text" id="folderLabel" placeholder="标签（可选）" style="max-width:120px">
+        <button class="btn btn-sm" onclick="pickFolder()">浏览</button>
         <button class="btn btn-sm btn-primary" onclick="addFolder()">添加</button>
       </div>
       <div id="presetsRow" style="margin-bottom:8px"></div>
@@ -373,15 +45,15 @@ body {
 
   <!-- Tabs -->
   <div class="tabs">
-    <div class="tab active" onclick="switchTab('dedup')">🔍 重复清理</div>
-    <div class="tab" onclick="switchTab('organize')">📁 文件整理</div>
+    <div class="tab active" onclick="switchTab('dedup')">重复清理</div>
+    <div class="tab" onclick="switchTab('organize')">文件整理</div>
   </div>
 
   <!-- ═══ DEDUP TAB ═══ -->
   <div class="tab-content active" id="tabDedup">
     <div style="margin-bottom:20px;text-align:center;display:flex;gap:12px;justify-content:center;align-items:center">
-      <button class="btn btn-primary" onclick="startScan()" id="scanBtn" style="padding:10px 40px;font-size:15px">🔍 扫描重复文件</button>
-      <button class="btn" onclick="startScan()" id="refreshBtn" style="display:none;padding:10px 20px;font-size:14px">🔄 刷新</button>
+      <button class="btn btn-primary" onclick="startScan()" id="scanBtn" style="padding:10px 44px;font-size:15px;letter-spacing:2px">扫描重复文件</button>
+      <button class="btn" onclick="startScan()" id="refreshBtn" style="display:none;padding:10px 20px;font-size:14px">刷新</button>
     </div>
 
     <div class="stats" id="statsArea" style="display:none">
@@ -393,7 +65,7 @@ body {
 
     <div class="toolbar" id="toolbar" style="display:none">
       <div class="toolbar-row">
-        <input class="search-input" id="searchInput" placeholder="🔍 搜索文件名..." oninput="renderGroups()">
+        <input class="search-input" id="searchInput" placeholder="搜索文件名…" oninput="renderGroups()">
         <select class="select" id="sortSelect" onchange="renderGroups()">
           <option value="savings">可节省空间↓</option>
           <option value="count">文件数量↓</option>
@@ -401,9 +73,9 @@ body {
           <option value="time">修改时间↓</option>
         </select>
         <select class="select" id="modeSelect" onchange="changeMode()">
-          <option value="exact">精确模式 (名+大小)</option>
-          <option value="content">内容模式 (MD5)</option>
-          <option value="similar">相似模式 (同名)</option>
+          <option value="exact">精确模式（名+大小+内容校验）</option>
+          <option value="content">内容模式（MD5）</option>
+          <option value="similar">相似模式（同名/副本）</option>
         </select>
       </div>
       <div class="toolbar-row">
@@ -411,11 +83,11 @@ body {
       </div>
       <div class="toolbar-row">
         <div class="quick-rules">
-          <span class="quick-rules-label">快捷规则:</span>
+          <span class="quick-rules-label">快捷规则</span>
           <button class="btn btn-sm" onclick="applyQuickRule('keep_newest')">保留最新</button>
           <button class="btn btn-sm" onclick="applyQuickRule('keep_oldest')">保留最旧</button>
           <select class="select btn-sm" id="keepLabelSelect" style="font-size:12px">
-            <option value="">保留指定来源...</option>
+            <option value="">保留指定来源…</option>
           </select>
           <button class="btn btn-sm" onclick="applyQuickRule('keep_label')">应用</button>
           <button class="btn btn-sm" onclick="clearSelections()">清空勾选</button>
@@ -435,8 +107,8 @@ body {
   <!-- ═══ ORGANIZE TAB ═══ -->
   <div class="tab-content" id="tabOrganize">
     <div style="margin-bottom:20px;text-align:center;display:flex;gap:12px;justify-content:center;align-items:center">
-      <button class="btn btn-primary" onclick="startOrganizeScan()" id="orgScanBtn" style="padding:10px 40px;font-size:15px">📁 整理文件</button>
-      <button class="btn" onclick="startOrganizeScan()" id="orgRefreshBtn" style="display:none;padding:10px 20px;font-size:14px">🔄 刷新</button>
+      <button class="btn btn-primary" onclick="startOrganizeScan()" id="orgScanBtn" style="padding:10px 44px;font-size:15px;letter-spacing:2px">整理文件</button>
+      <button class="btn" onclick="startOrganizeScan()" id="orgRefreshBtn" style="display:none;padding:10px 20px;font-size:14px">刷新</button>
     </div>
 
     <div class="stats" id="orgStatsArea" style="display:none">
@@ -448,14 +120,15 @@ body {
 
     <div class="toolbar" id="orgToolbar" style="display:none">
       <div class="toolbar-row">
-        <input class="search-input" id="orgSearchInput" placeholder="🔍 搜索文件名..." oninput="renderCategories()">
+        <input class="search-input" id="orgSearchInput" placeholder="搜索文件名…" oninput="renderCategories()">
         <div class="filter-chips" id="orgExtChips"></div>
       </div>
       <div class="toolbar-row">
         <div class="quick-rules">
           <button class="btn btn-sm" onclick="orgSelectAll()">全选</button>
           <button class="btn btn-sm" onclick="orgSelectNone()">取消全选</button>
-          <span style="font-size:12px;color:var(--text-dim);margin-left:8px">提示：点击分类标题展开/折叠，标题前勾选框选中整个分类</span>
+          <button class="btn btn-sm btn-primary" onclick="showArchiveModal()">按分类归档…</button>
+          <span style="font-size:12px;color:var(--text-dim);margin-left:8px">点击分类标题展开 / 折叠，标题前勾选框选中整个分类</span>
         </div>
       </div>
     </div>
@@ -481,18 +154,19 @@ body {
 <!-- Progress Overlay -->
 <div class="progress-overlay" id="progressOverlay">
   <div class="progress-box">
-    <div style="font-size:16px;font-weight:600" id="progressTitle">扫描中...</div>
+    <div style="font-size:16px;font-weight:600;letter-spacing:1px" id="progressTitle">扫描中…</div>
     <div class="progress-bar"><div class="fill" id="progressFill"></div></div>
-    <div class="progress-text" id="progressText">准备中...</div>
+    <div class="progress-text" id="progressText">准备中…</div>
+    <button class="btn btn-sm" id="cancelScanBtn" style="margin-top:14px">取消扫描</button>
   </div>
 </div>
 
 <!-- Operation Progress Overlay -->
 <div class="progress-overlay" id="opProgressOverlay">
   <div class="progress-box">
-    <div style="font-size:16px;font-weight:600" id="opProgressTitle">正在操作...</div>
+    <div style="font-size:16px;font-weight:600;letter-spacing:1px" id="opProgressTitle">正在操作…</div>
     <div class="progress-bar"><div class="fill" id="opProgressFill"></div></div>
-    <div class="progress-text" id="opProgressText">准备中...</div>
+    <div class="progress-text" id="opProgressText">准备中…</div>
   </div>
 </div>
 
@@ -500,10 +174,26 @@ body {
 <div class="modal-overlay" id="deleteModal">
   <div class="modal">
     <h3>确认删除</h3>
-    <div class="desc">将删除 <span id="deleteCount" style="color:var(--danger);font-weight:600">0</span> 个文件到回收站，可恢复。确认继续？</div>
+    <div class="desc" id="deleteDesc">将删除 <span id="deleteCount" style="color:var(--danger);font-weight:600">0</span> 个文件到回收站，可恢复。确认继续？</div>
     <div class="modal-actions">
       <button class="btn" onclick="closeModal('deleteModal')">取消</button>
       <button class="btn btn-danger" onclick="executeDelete()">确认删除</button>
+    </div>
+  </div>
+</div>
+
+<!-- Archive-by-Category Modal -->
+<div class="modal-overlay" id="archiveModal">
+  <div class="modal">
+    <h3>按分类归档</h3>
+    <div class="desc">把 <span id="archiveCount" style="color:var(--accent);font-weight:600">0</span> 个文件按所属分类移动到 <b>目标根目录/&lt;分类名&gt;/</b> 下（子文件夹自动创建，同名文件自动加后缀，受保护文件跳过）。</div>
+    <input type="text" id="archiveDestInput" placeholder="目标根目录路径…" style="width:100%;margin-bottom:12px">
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <button class="btn btn-sm" onclick="pickArchiveDest()">浏览</button>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('archiveModal')">取消</button>
+      <button class="btn btn-primary" onclick="executeArchive()">开始归档</button>
     </div>
   </div>
 </div>
@@ -513,9 +203,9 @@ body {
   <div class="modal">
     <h3>移动文件</h3>
     <div class="desc">将 <span id="moveCount" style="color:var(--accent);font-weight:600">0</span> 个文件移动到指定文件夹。同名文件自动加后缀。</div>
-    <input type="text" id="moveDestInput" placeholder="目标文件夹路径..." style="width:100%;margin-bottom:12px">
+    <input type="text" id="moveDestInput" placeholder="目标文件夹路径…" style="width:100%;margin-bottom:12px">
     <div style="display:flex;gap:8px;margin-bottom:12px">
-      <button class="btn btn-sm" onclick="pickMoveDest()">📂 浏览</button>
+      <button class="btn btn-sm" onclick="pickMoveDest()">浏览</button>
     </div>
     <div class="modal-actions">
       <button class="btn" onclick="closeModal('moveModal')">取消</button>
@@ -527,13 +217,13 @@ body {
 <!-- Settings Modal -->
 <div class="settings-panel" id="settingsModal">
   <div class="settings-box">
-    <h3>⚙️ 设置</h3>
+    <h3>设置</h3>
     <div class="setting-row">
-      <label>API Key (OpenAI 兼容)</label>
-      <input type="text" id="setApiKey" placeholder="sk-...">
+      <label>API KEY（OPENAI 兼容）</label>
+      <input type="text" id="setApiKey" placeholder="sk-…">
     </div>
     <div class="setting-row">
-      <label>API Base URL</label>
+      <label>API BASE URL</label>
       <input type="text" id="setApiBase" placeholder="https://api.openai.com/v1">
     </div>
     <div class="setting-row">
@@ -541,19 +231,20 @@ body {
       <input type="text" id="setApiModel" placeholder="gpt-4o-mini">
     </div>
     <div class="setting-row">
-      <label>最小文件大小 (KB)</label>
+      <label>最小文件大小（KB）</label>
       <input type="number" id="setMinSize" placeholder="1">
     </div>
     <div class="setting-row">
-      <label>文件类型</label>
-      <select id="setFileTypes">
-        <option value="work">工作文档 (PDF/DOC/DWG/ZIP...)</option>
-        <option value="all">全部文件</option>
-      </select>
+      <label>文件类型（扩展名，逗号分隔；留空 = 全部文件）</label>
+      <input type="text" id="setFileTypes" placeholder=".pdf, .docx, .xlsx, .dwg …">
+      <div style="display:flex;gap:8px;margin-top:6px">
+        <button class="btn btn-sm" onclick="fillDefaultFileTypes()">恢复默认（工作文档）</button>
+        <button class="btn btn-sm" onclick="document.getElementById('setFileTypes').value=''">全部文件</button>
+      </div>
     </div>
 
     <div class="setting-section">
-      <h4>📁 整理关键词配置</h4>
+      <h4>整理关键词配置</h4>
       <div style="font-size:12px;color:var(--text-dim);margin-bottom:12px">每行一个分类，关键词用逗号分隔。文件名包含关键词即归入该分类。</div>
       <div id="keywordRows"></div>
       <button class="btn btn-sm" onclick="addKeywordRow()" style="margin-top:8px">+ 添加分类</button>
@@ -570,7 +261,7 @@ body {
 <div class="modal-overlay" id="logModal">
   <div class="modal" style="min-width:600px;max-width:700px">
     <h3>操作日志</h3>
-    <pre id="logContent" style="max-height:400px;overflow:auto;font-size:12px;background:var(--bg);padding:12px;border-radius:6px;margin-bottom:12px"></pre>
+    <pre id="logContent" style="max-height:400px;overflow:auto;font-size:12px;font-family:var(--font-mono);background:var(--bg);padding:14px;border-radius:5px;margin-bottom:12px;border:1px solid var(--border)"></pre>
     <div class="modal-actions">
       <button class="btn" onclick="closeModal('logModal')">关闭</button>
       <button class="btn btn-sm" onclick="exportData('log')">导出</button>
@@ -582,826 +273,20 @@ body {
 <div class="toast" id="toast"></div>
 
 <script>
-// ─── State ───
-let scanResult = null;
-let organizeResult = null;
-let selectedFiles = new Set();      // dedup selections
-let orgSelectedFiles = new Set();   // organize selections
-let currentFilter = '';
-let orgCurrentFilter = '';
-let folderCollapsed = false;
-let currentTab = 'dedup';
-
-// ─── Init ───
-document.addEventListener('DOMContentLoaded', () => {
-  loadConfig();
-  loadFolders();
-  loadPresets();
-  // Check previous dedup result
-  fetch('/api/scan/result').then(r=>r.json()).then(d=>{
-    if(d.groups && d.groups.length>=0 && d.total_files>0){
-      scanResult = d;
-      renderAll();
-    }
-  });
-  // Check previous organize result
-  fetch('/api/organize/result').then(r=>r.json()).then(d=>{
-    if(d.categories && d.total_files>0){
-      organizeResult = d;
-      renderOrganizeAll();
-    }
-  });
-  // Mode select
-  const cfgMode = localStorage.getItem('scan_mode');
-  if(cfgMode) document.getElementById('modeSelect').value = cfgMode;
-});
-
-// ─── Tab Switch ───
-function switchTab(tab){
-  currentTab = tab;
-  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
-  document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
-  if(tab==='dedup'){
-    document.querySelectorAll('.tab')[0].classList.add('active');
-    document.getElementById('tabDedup').classList.add('active');
-  } else {
-    document.querySelectorAll('.tab')[1].classList.add('active');
-    document.getElementById('tabOrganize').classList.add('active');
-  }
-  // Update action bar context
-  updateActionBar();
-}
-
-function loadConfig(){
-  fetch('/api/config').then(r=>r.json()).then(cfg=>{
-    document.getElementById('modeSelect').value = cfg.scan_mode || 'exact';
-    localStorage.setItem('scan_mode', cfg.scan_mode || 'exact');
-  });
-}
-
-function loadFolders(){
-  const el = document.getElementById('folderItems');
-  if(el) el.innerHTML = '<div style="color:var(--text-dim);font-size:13px;padding:8px">加载中...</div>';
-  fetch('/api/folders').then(r=>r.json()).then(renderFolders);
-}
-
-function loadPresets(){
-  fetch('/api/presets').then(r=>r.json()).then(presets=>{
-    const el = document.getElementById('presetsRow');
-    if(!presets.length){ el.innerHTML=''; return; }
-    el.innerHTML = '<span style="font-size:12px;color:var(--text-dim);margin-right:4px">预设:</span>' +
-      presets.map(p=>`<span class="chip" onclick="addPreset('${p.path}','${p.label}')">${p.label} +</span>`).join('');
-  });
-}
-
-function addPreset(path, label){
-  fetch('/api/folders', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({path, label, protected:false})
-  }).then(r=>r.json()).then(d=>{
-    if(d.error) return toast(d.error, 'error');
-    toast('已添加', 'success');
-    loadFolders();
-  });
-}
-
-function renderFolders(folders){
-  const el = document.getElementById('folderItems');
-  if(!folders.length){
-    el.innerHTML = '<div style="color:var(--text-dim);font-size:13px;padding:8px">暂无文件夹，添加路径开始</div>';
-    return;
-  }
-  el.innerHTML = folders.map((f,i)=>{
-    return `
-    <div class="folder-item" data-path="${f.path}">
-      <div class="info">
-        <span class="label">${f.label}</span>
-        ${f.protected?'<span class="protect-badge">🔒保护</span>':''}
-        <span class="path" title="${f.path}">${f.path}</span>
-        <span class="meta">${f.count} 文件 · ${f.size_str}</span>
-      </div>
-      <div class="actions">
-        <button class="btn btn-sm" data-action="protect" data-idx="${i}">${f.protected?'取消保护':'🔒保护'}</button>
-        <button class="btn btn-sm" data-action="remove" data-idx="${i}">移除</button>
-      </div>
-    </div>`;
-  }).join('');
-  el.querySelectorAll('button[data-action]').forEach(btn=>{
-    btn.addEventListener('click', e=>{
-      const item = e.target.closest('.folder-item');
-      const path = item.dataset.path;
-      const action = e.target.dataset.action;
-      if(action==='remove') removeFolder(path);
-      else if(action==='protect') toggleProtect(path);
+// ─── 主题切换：朱砂 / 靛蓝 / 墨绿 ───
+(function(){
+  const KEY = 'guidang_theme';
+  function apply(theme){
+    document.documentElement.setAttribute('data-theme', theme);
+    document.querySelectorAll('.theme-dot').forEach(d=>{
+      d.classList.toggle('active', d.dataset.themeChoice === theme);
     });
-  });
-}
-
-function pickFolder(){
-  fetch('/api/folders/pick', {method:'POST'})
-    .then(r=>r.json())
-    .then(d=>{
-      if(d.error) return toast(d.error, 'error');
-      if(d.path) document.getElementById('folderPath').value = d.path;
-    });
-}
-
-function addFolder(){
-  const path = document.getElementById('folderPath').value.trim();
-  const label = document.getElementById('folderLabel').value.trim();
-  if(!path) return toast('请输入路径', 'error');
-  fetch('/api/folders', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({path, label, protected:false})
-  }).then(r=>r.json()).then(d=>{
-    if(d.error) return toast(d.error, 'error');
-    document.getElementById('folderPath').value='';
-    document.getElementById('folderLabel').value='';
-    toast('已添加', 'success');
-    loadFolders();
-  });
-}
-
-function removeFolder(path){
-  fetch('/api/folders?path='+encodeURIComponent(path), {method:'DELETE'})
-    .then(r=>r.json()).then(()=>{ loadFolders(); });
-}
-
-function toggleProtect(path){
-  fetch('/api/folders/protect', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({path})
-  }).then(r=>r.json()).then(()=>loadFolders());
-}
-
-function toggleFolderPanel(){
-  const el = document.getElementById('folderList');
-  const toggle = document.getElementById('folderToggle');
-  folderCollapsed = !folderCollapsed;
-  el.classList.toggle('collapsed', folderCollapsed);
-  toggle.textContent = folderCollapsed ? '▸' : '▾';
-}
-
-// ══════════════════════════════════════════
-// ─── DEDUP: Scan ───
-// ══════════════════════════════════════════
-function startScan(){
-  fetch('/api/scan', {method:'POST'}).then(r=>r.json()).then(d=>{
-    if(d.error) return toast(d.error, 'error');
-    document.getElementById('progressTitle').textContent = '扫描重复文件中...';
-    document.getElementById('progressOverlay').classList.add('show');
-    pollScan();
-  });
-}
-
-function pollScan(){
-  fetch('/api/scan/status').then(r=>r.json()).then(s=>{
-    const pct = s.total > 0 ? Math.min(100, Math.round(s.progress/s.total*100)) : 0;
-    document.getElementById('progressFill').style.width = pct+'%';
-    document.getElementById('progressText').textContent =
-      `${s.progress} / ${s.total} · ${s.current_path ? s.current_path.split('\\').pop() : ''}`;
-    if(s.scanning){
-      setTimeout(pollScan, 300);
-    } else {
-      document.getElementById('progressOverlay').classList.remove('show');
-      if(s.error){
-        toast(s.error, 'error');
-      } else if(s.has_result){
-        fetchResult();
-      }
-    }
-  });
-}
-
-function fetchResult(){
-  fetch('/api/scan/result').then(r=>r.json()).then(d=>{
-    scanResult = d;
-    renderAll();
-  });
-}
-
-// ─── DEDUP: Render ───
-function renderAll(){
-  if(!scanResult) return;
-  document.getElementById('statsArea').style.display='grid';
-  document.getElementById('toolbar').style.display='block';
-  document.getElementById('refreshBtn').style.display = '';
-  updateStats();
-
-  const exts = {};
-  scanResult.groups.forEach(g=>{ exts[g.ext] = (exts[g.ext]||0) + 1; });
-  const chipEl = document.getElementById('extChips');
-  chipEl.innerHTML = '<span class="chip active" data-ext="" onclick="filterExt(this)">全部</span>' +
-    Object.entries(exts).sort((a,b)=>b[1]-a[1]).map(([ext,n])=>
-      `<span class="chip" data-ext="${ext}" onclick="filterExt(this)">${ext.replace('.','').toUpperCase()} (${n})</span>`
-    ).join('');
-
-  const sources = new Set();
-  scanResult.groups.forEach(g=>g.files.forEach(f=>sources.add(f.source.replace('🔒 ',''))));
-  document.getElementById('keepLabelSelect').innerHTML =
-    '<option value="">保留指定来源...</option>' +
-    [...sources].map(s=>`<option value="${s}">${s}</option>`).join('');
-
-  renderGroups();
-}
-
-function renderGroups(){
-  if(!scanResult) return;
-  const search = document.getElementById('searchInput').value.toLowerCase();
-  const sort = document.getElementById('sortSelect').value;
-  let groups = [...scanResult.groups];
-  if(currentFilter) groups = groups.filter(g=>g.ext === currentFilter);
-  if(search) groups = groups.filter(g=>g.filename.toLowerCase().includes(search));
-  if(sort==='savings') groups.sort((a,b)=>b.savings-a.savings);
-  else if(sort==='count') groups.sort((a,b)=>b.count-a.count);
-  else if(sort==='name') groups.sort((a,b)=>a.filename.localeCompare(b.filename));
-  else if(sort==='time') groups.sort((a,b)=>b.files[0].mtime-a.files[0].mtime);
-
-  const el = document.getElementById('groupsArea');
-  if(!groups.length){
-    el.innerHTML = '<div class="empty"><div class="icon">🎉</div><div>没有找到重复文件</div></div>';
-    return;
+    localStorage.setItem(KEY, theme);
   }
-  el.innerHTML = groups.map(g=>`
-    <div class="group-card">
-      <div class="group-header">
-        <div class="title">
-          <span class="fname">${g.filename}</span>
-          <span class="badge">${g.ext.replace('.','').toUpperCase()}</span>
-          <span class="meta">×${g.count}</span>
-          ${g.is_similar?'<span class="similar-tag">⚠️ 可能不同版本</span>':''}
-        </div>
-        <div class="savings">省 ${g.savings_str}</div>
-      </div>
-      ${g.files.map((f,i)=>`
-        <div class="file-row">
-          <input type="checkbox" data-id="${f.id}" data-path="${f.path}" data-size="${f.size}"
-            ${selectedFiles.has(f.id)?'checked':''}
-            ${f.protected?'style="accent-color:var(--warning)"':''}
-            onchange="toggleSelect(this)">
-          <span class="f-source">${f.source}</span>
-          ${f.protected?'<span class="f-protected">🔒</span>':''}
-          ${i===0?'<span class="keep-tag">建议保留</span>':''}
-          <span class="f-path" title="${f.path}">${f.path}</span>
-          <span class="f-date">${f.mtime_str}</span>
-          <span class="f-size">${formatSize(f.size)}</span>
-        </div>
-      `).join('')}
-    </div>
-  `).join('');
-  updateActionBar();
-}
-
-function filterExt(el){
-  document.querySelectorAll('#extChips .chip').forEach(c=>c.classList.remove('active'));
-  el.classList.add('active');
-  currentFilter = el.dataset.ext;
-  renderGroups();
-}
-
-function changeMode(){
-  const mode = document.getElementById('modeSelect').value;
-  fetch('/api/config', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({scan_mode: mode})
-  }).then(()=>{
-    localStorage.setItem('scan_mode', mode);
-    if(scanResult) startScan();
+  document.querySelectorAll('.theme-dot').forEach(d=>{
+    d.addEventListener('click', ()=>apply(d.dataset.themeChoice));
   });
-}
-
-// ─── DEDUP: Selection ───
-function toggleSelect(cb){
-  const id = cb.dataset.id;
-  if(cb.checked) selectedFiles.add(id);
-  else selectedFiles.delete(id);
-  updateActionBar();
-}
-
-function clearSelections(){
-  if(currentTab==='dedup'){
-    selectedFiles.clear();
-    document.querySelectorAll('#tabDedup .file-row input[type=checkbox]').forEach(cb=>cb.checked=false);
-  } else {
-    orgSelectedFiles.clear();
-    document.querySelectorAll('#tabOrganize .file-row input[type=checkbox]').forEach(cb=>cb.checked=false);
-  }
-  updateActionBar();
-}
-
-function updateActionBar(){
-  const count = currentTab==='dedup' ? selectedFiles.size : orgSelectedFiles.size;
-  const bar = document.getElementById('actionBar');
-  if(count > 0){
-    bar.classList.add('show');
-    document.getElementById('selCount').textContent = count;
-    let size = 0;
-    if(currentTab==='dedup' && scanResult){
-      scanResult.groups.forEach(g=>g.files.forEach(f=>{ if(selectedFiles.has(f.id)) size += f.size; }));
-    } else if(currentTab==='organize' && organizeResult){
-      organizeResult.categories.forEach(c=>c.files.forEach(f=>{ if(orgSelectedFiles.has(f.id)) size += f.size; }));
-    }
-    document.getElementById('selSize').textContent = '· ' + formatSize(size);
-  } else {
-    bar.classList.remove('show');
-  }
-}
-
-// ─── DEDUP: Quick Rules ───
-function applyQuickRule(rule){
-  if(!scanResult) return;
-  const label = document.getElementById('keepLabelSelect').value;
-  fetch('/api/quick_rule', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({rule, groups: scanResult.groups, keep_label: label})
-  }).then(r=>r.json()).then(d=>{
-    selectedFiles.clear();
-    d.selections.forEach(id=>selectedFiles.add(id));
-    renderGroups();
-    toast(`已勾选 ${d.selections.length} 个文件`, 'success');
-  });
-}
-
-// ─── DEDUP: AI ───
-function applyAI(){
-  const text = document.getElementById('aiInput').value.trim();
-  if(!text) return;
-  if(!scanResult) return toast('请先扫描', 'error');
-  document.getElementById('aiBtn').disabled = true;
-  document.getElementById('aiBtn').textContent = '分析中...';
-  fetch('/api/ai', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({text, groups: scanResult.groups})
-  }).then(r=>r.json()).then(d=>{
-    document.getElementById('aiBtn').disabled = false;
-    document.getElementById('aiBtn').textContent = '执行';
-    if(d.error) return toast(d.error, 'error');
-    const ue = document.getElementById('aiUnderstanding');
-    ue.style.display = 'block';
-    ue.textContent = '🤖 AI理解: ' + (d.understanding || '(无说明)');
-    if(d.selections && Array.isArray(d.selections)){
-      selectedFiles.clear();
-      d.selections.forEach(id=>selectedFiles.add(id));
-      renderGroups();
-      toast(`AI 勾选了 ${d.selections.length} 个文件，请确认后操作`, 'success');
-    }
-  }).catch(e=>{
-    document.getElementById('aiBtn').disabled = false;
-    document.getElementById('aiBtn').textContent = '执行';
-    toast('AI请求失败: '+e.message, 'error');
-  });
-}
-
-// ══════════════════════════════════════════
-// ─── ORGANIZE: Scan ───
-// ══════════════════════════════════════════
-function startOrganizeScan(){
-  fetch('/api/organize/scan', {method:'POST'}).then(r=>r.json()).then(d=>{
-    if(d.error) return toast(d.error, 'error');
-    document.getElementById('progressTitle').textContent = '整理扫描中...';
-    document.getElementById('progressOverlay').classList.add('show');
-    pollOrganizeScan();
-  });
-}
-
-function pollOrganizeScan(){
-  fetch('/api/organize/status').then(r=>r.json()).then(s=>{
-    const pct = s.total > 0 ? Math.min(100, Math.round(s.progress/s.total*100)) : 0;
-    document.getElementById('progressFill').style.width = pct+'%';
-    document.getElementById('progressText').textContent =
-      `${s.progress} / ${s.total} · ${s.current_path ? s.current_path.split('\\').pop() : ''}`;
-    if(s.scanning){
-      setTimeout(pollOrganizeScan, 300);
-    } else {
-      document.getElementById('progressOverlay').classList.remove('show');
-      if(s.error){
-        toast(s.error, 'error');
-      } else if(s.has_result){
-        fetchOrganizeResult();
-      }
-    }
-  });
-}
-
-function fetchOrganizeResult(){
-  fetch('/api/organize/result').then(r=>r.json()).then(d=>{
-    organizeResult = d;
-    renderOrganizeAll();
-  });
-}
-
-// ─── ORGANIZE: Render ───
-function renderOrganizeAll(){
-  if(!organizeResult) return;
-  document.getElementById('orgStatsArea').style.display='grid';
-  document.getElementById('orgToolbar').style.display='block';
-  document.getElementById('orgRefreshBtn').style.display = '';
-  // Update stats
-  document.getElementById('orgStatTotal').textContent = organizeResult.total_files;
-  document.getElementById('orgStatCats').textContent = organizeResult.total_categories;
-  let totalSize = 0;
-  organizeResult.categories.forEach(c=>totalSize += c.total_size);
-  document.getElementById('orgStatSize').textContent = formatSize(totalSize);
-  document.getElementById('orgStatSelected').textContent = orgSelectedFiles.size;
-
-  // Ext chips
-  const exts = {};
-  organizeResult.categories.forEach(c=>c.files.forEach(f=>{ exts[f.ext] = (exts[f.ext]||0) + 1; }));
-  const chipEl = document.getElementById('orgExtChips');
-  chipEl.innerHTML = '<span class="chip active" data-ext="" onclick="orgFilterExt(this)">全部</span>' +
-    Object.entries(exts).sort((a,b)=>b[1]-a[1]).map(([ext,n])=>
-      `<span class="chip" data-ext="${ext}" onclick="orgFilterExt(this)">${ext.replace('.','').toUpperCase()} (${n})</span>`
-    ).join('');
-
-  renderCategories();
-}
-
-function renderCategories(){
-  if(!organizeResult) return;
-  const search = document.getElementById('orgSearchInput').value.toLowerCase();
-  let categories = [...organizeResult.categories];
-
-  // Filter by ext
-  if(orgCurrentFilter){
-    categories = categories.map(c=>({...c, files:c.files.filter(f=>f.ext===orgCurrentFilter)}))
-                           .filter(c=>c.files.length > 0);
-  }
-  // Filter by search
-  if(search){
-    categories = categories.map(c=>({...c, files:c.files.filter(f=>f.name.toLowerCase().includes(search))}))
-                           .filter(c=>c.files.length > 0);
-  }
-
-  const el = document.getElementById('categoriesArea');
-  if(!categories.length){
-    el.innerHTML = '<div class="empty"><div class="icon">📁</div><div>没有找到文件</div></div>';
-    return;
-  }
-
-  el.innerHTML = categories.map((c,ci)=>{
-    const allIds = c.files.filter(f=>!f.protected).map(f=>f.id);
-    const selCount = allIds.filter(id=>orgSelectedFiles.has(id)).length;
-    const allSelected = allIds.length > 0 && selCount === allIds.length;
-    return `
-    <div class="category-card">
-      <div class="category-header">
-        <div class="title" style="display:flex;align-items:center;gap:8px">
-          <input type="checkbox" style="width:18px;height:18px;cursor:pointer;accent-color:var(--accent)"
-            ${allSelected?'checked':''}
-            onchange="toggleCategorySelect(${ci}, this.checked)"
-            onclick="event.stopPropagation()">
-          <span class="cname" style="cursor:pointer" onclick="toggleCategoryBody(${ci})">${c.category}</span>
-          <span class="badge">${c.count} 个文件</span>
-          ${selCount>0?`<span class="badge" style="background:rgba(78,138,255,.15);color:var(--accent)">已选 ${selCount}</span>`:''}
-        </div>
-        <div class="size" style="cursor:pointer" onclick="toggleCategoryBody(${ci})">${c.total_size_str}</div>
-      </div>
-      <div class="category-body" id="catBody_${ci}">
-        ${c.files.map(f=>`
-          <div class="file-row">
-            <input type="checkbox" data-id="${f.id}" data-path="${f.path}" data-size="${f.size}"
-              ${orgSelectedFiles.has(f.id)?'checked':''}
-              ${f.protected?'style="accent-color:var(--warning)"':''}
-              onchange="toggleOrgSelect(this)">
-            <span class="f-source">${f.source}</span>
-            ${f.protected?'<span class="f-protected">🔒</span>':''}
-            <span class="f-path" title="${f.path}">${f.path}</span>
-            <span class="f-date">${f.mtime_str}</span>
-            <span class="f-size">${formatSize(f.size)}</span>
-          </div>
-        `).join('')}
-      </div>
-    </div>`;
-  }).join('');
-
-  // Auto-expand first category
-  if(categories.length > 0 && !document.getElementById('catBody_0').classList.contains('expanded')){
-    // Keep collapsed by default, user clicks to expand
-  }
-  updateOrgStats();
-}
-
-function toggleCategoryBody(idx){
-  const el = document.getElementById('catBody_'+idx);
-  if(el) el.classList.toggle('expanded');
-}
-
-function toggleCategorySelect(ci, checked){
-  // Get visible categories (same filtering as renderCategories)
-  const search = document.getElementById('orgSearchInput').value.toLowerCase();
-  let categories = [...organizeResult.categories];
-  if(orgCurrentFilter){
-    categories = categories.map(c=>({...c, files:c.files.filter(f=>f.ext===orgCurrentFilter)}))
-                           .filter(c=>c.files.length > 0);
-  }
-  if(search){
-    categories = categories.map(c=>({...c, files:c.files.filter(f=>f.name.toLowerCase().includes(search))}))
-                           .filter(c=>c.files.length > 0);
-  }
-  const cat = categories[ci];
-  if(!cat) return;
-  if(checked){
-    cat.files.forEach(f=>{ if(!f.protected) orgSelectedFiles.add(f.id); });
-  } else {
-    cat.files.forEach(f=>orgSelectedFiles.delete(f.id));
-  }
-  renderCategories();
-  updateActionBar();
-}
-
-function orgFilterExt(el){
-  document.querySelectorAll('#orgExtChips .chip').forEach(c=>c.classList.remove('active'));
-  el.classList.add('active');
-  orgCurrentFilter = el.dataset.ext;
-  renderCategories();
-}
-
-function toggleOrgSelect(cb){
-  const id = cb.dataset.id;
-  if(cb.checked) orgSelectedFiles.add(id);
-  else orgSelectedFiles.delete(id);
-  updateOrgStats();
-  updateActionBar();
-}
-
-function updateOrgStats(){
-  document.getElementById('orgStatSelected').textContent = orgSelectedFiles.size;
-}
-
-function orgSelectAll(){
-  if(!organizeResult) return;
-  organizeResult.categories.forEach(c=>c.files.forEach(f=>{
-    if(!f.protected) orgSelectedFiles.add(f.id);
-  }));
-  renderCategories();
-  updateActionBar();
-}
-
-function orgSelectNone(){
-  orgSelectedFiles.clear();
-  renderCategories();
-  updateActionBar();
-}
-
-// ══════════════════════════════════════════
-// ─── Delete / Move (shared) ───
-// ══════════════════════════════════════════
-function getSelectedPaths(){
-  const paths = [];
-  if(currentTab==='dedup' && scanResult){
-    scanResult.groups.forEach(g=>g.files.forEach(f=>{
-      if(selectedFiles.has(f.id)) paths.push(f.path);
-    }));
-  } else if(currentTab==='organize' && organizeResult){
-    organizeResult.categories.forEach(c=>c.files.forEach(f=>{
-      if(orgSelectedFiles.has(f.id)) paths.push(f.path);
-    }));
-  }
-  return paths;
-}
-
-function confirmDelete(){
-  const paths = getSelectedPaths();
-  document.getElementById('deleteCount').textContent = paths.length;
-  document.getElementById('deleteModal').classList.add('show');
-}
-
-function executeDelete(){
-  const paths = getSelectedPaths();
-  closeModal('deleteModal');
-  showOpProgress('正在删除...', paths.length);
-  let idx = 0, success = 0, failed = 0;
-  const donePaths = [];
-  function deleteOne(){
-    if(idx >= paths.length){
-      hideOpProgress();
-      toast(`已删除 ${success} 个文件${failed>0?'，失败 '+failed+' 个':''}`, failed>0?'error':'success');
-      if(currentTab==='dedup') removeFilesFromUI(donePaths);
-      else removeOrgFilesFromUI(donePaths);
-      clearSelections();
-      return;
-    }
-    updateOpProgress(idx, paths.length, paths[idx]);
-    fetch('/api/operate', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({action:'delete', files:[paths[idx]]})
-    }).then(r=>r.json()).then(d=>{
-      if(d.ok && d.success>0){ success++; donePaths.push(paths[idx]); }
-      else failed++;
-      idx++;
-      setTimeout(deleteOne, 10);
-    }).catch(()=>{ failed++; idx++; setTimeout(deleteOne, 10); });
-  }
-  deleteOne();
-}
-
-function showMoveModal(){
-  const paths = getSelectedPaths();
-  document.getElementById('moveCount').textContent = paths.length;
-  document.getElementById('moveModal').classList.add('show');
-}
-
-function pickMoveDest(){
-  fetch('/api/folders/pick', {method:'POST'})
-    .then(r=>r.json())
-    .then(d=>{
-      if(d.error) return toast(d.error, 'error');
-      if(d.path) document.getElementById('moveDestInput').value = d.path;
-    });
-}
-
-function executeMove(){
-  const paths = getSelectedPaths();
-  const dest = document.getElementById('moveDestInput').value.trim();
-  if(!dest) return toast('请输入目标路径', 'error');
-  closeModal('moveModal');
-  showOpProgress('正在移动...', paths.length);
-  let idx = 0, success = 0, failed = 0;
-  const donePaths = [];
-  function moveOne(){
-    if(idx >= paths.length){
-      hideOpProgress();
-      toast(`已移动 ${success} 个文件${failed>0?'，失败 '+failed+' 个':''}`, failed>0?'error':'success');
-      if(currentTab==='dedup') removeFilesFromUI(donePaths);
-      else removeOrgFilesFromUI(donePaths);
-      clearSelections();
-      return;
-    }
-    updateOpProgress(idx, paths.length, paths[idx]);
-    fetch('/api/operate', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({action:'move', files:[paths[idx]], dest_dir:dest})
-    }).then(r=>r.json()).then(d=>{
-      if(d.ok && d.success>0){ success++; donePaths.push(paths[idx]); }
-      else failed++;
-      idx++;
-      setTimeout(moveOne, 10);
-    }).catch(()=>{ failed++; idx++; setTimeout(moveOne, 10); });
-  }
-  moveOne();
-}
-
-// ─── Remove operated files from UI ───
-function removeFilesFromUI(donePaths){
-  if(!donePaths.length || !scanResult) return;
-  const doneSet = new Set(donePaths);
-  scanResult.groups.forEach(g=>{ g.files = g.files.filter(f=>!doneSet.has(f.path)); });
-  scanResult.groups = scanResult.groups.filter(g=>g.files.length > 1);
-  updateStats();
-  renderGroups();
-  document.getElementById('refreshBtn').style.display = '';
-}
-
-function removeOrgFilesFromUI(donePaths){
-  if(!donePaths.length || !organizeResult) return;
-  const doneSet = new Set(donePaths);
-  organizeResult.categories.forEach(c=>{ c.files = c.files.filter(f=>!doneSet.has(f.path)); });
-  organizeResult.categories = organizeResult.categories.filter(c=>c.files.length > 0);
-  // Recalculate
-  organizeResult.total_files = organizeResult.categories.reduce((s,c)=>s+c.files.length, 0);
-  organizeResult.total_categories = organizeResult.categories.length;
-  renderOrganizeAll();
-  document.getElementById('orgRefreshBtn').style.display = '';
-}
-
-function updateStats(){
-  if(!scanResult) return;
-  scanResult.total_dup_files = scanResult.groups.reduce((s,g)=>s+g.files.length, 0);
-  scanResult.total_groups = scanResult.groups.length;
-  let totalSavings = 0;
-  scanResult.groups.forEach(g=>{
-    const minSize = Math.min(...g.files.map(f=>f.size));
-    totalSavings += g.files.reduce((s,f)=>s+f.size, 0) - minSize;
-  });
-  scanResult.total_savings = totalSavings;
-  scanResult.total_savings_str = formatSize(totalSavings);
-  document.getElementById('statTotal').textContent = scanResult.total_files;
-  document.getElementById('statGroups').textContent = scanResult.total_groups;
-  document.getElementById('statDupFiles').textContent = scanResult.total_dup_files;
-  document.getElementById('statSavings').textContent = scanResult.total_savings_str;
-}
-
-// ─── Export ───
-function exportData(fmt){
-  window.open('/api/export?format='+fmt);
-}
-
-// ─── Log ───
-function showLog(){
-  fetch('/api/log').then(r=>r.text()).then(t=>{
-    document.getElementById('logContent').textContent = t || '(空)';
-    document.getElementById('logModal').classList.add('show');
-  });
-}
-
-// ─── Settings ───
-function showSettings(){
-  fetch('/api/config').then(r=>r.json()).then(cfg=>{
-    document.getElementById('setApiKey').value = cfg.api_key === '***' ? '' : (cfg.api_key||'');
-    document.getElementById('setApiBase').value = cfg.api_base || 'https://api.openai.com/v1';
-    document.getElementById('setApiModel').value = cfg.api_model || 'gpt-4o-mini';
-    document.getElementById('setMinSize').value = cfg.min_size_kb || 1;
-    document.getElementById('setFileTypes').value = cfg.file_types || 'work';
-    // Load keywords
-    renderKeywordRows(cfg.organize_keywords || {});
-    document.getElementById('settingsModal').classList.add('show');
-  });
-}
-
-function closeSettings(){
-  document.getElementById('settingsModal').classList.remove('show');
-}
-
-function renderKeywordRows(keywords){
-  const el = document.getElementById('keywordRows');
-  el.innerHTML = Object.entries(keywords).map(([cat, kws], i)=>`
-    <div class="keyword-row" data-idx="${i}">
-      <input type="text" class="cat-name" value="${cat}" placeholder="分类名">
-      <input type="text" class="kw-input" value="${(kws||[]).join(', ')}" placeholder="关键词，逗号分隔">
-      <button class="btn btn-sm btn-danger" onclick="this.parentElement.remove()">删除</button>
-    </div>
-  `).join('');
-}
-
-function addKeywordRow(){
-  const el = document.getElementById('keywordRows');
-  const div = document.createElement('div');
-  div.className = 'keyword-row';
-  div.innerHTML = `
-    <input type="text" class="cat-name" placeholder="分类名">
-    <input type="text" class="kw-input" placeholder="关键词，逗号分隔">
-    <button class="btn btn-sm btn-danger" onclick="this.parentElement.remove()">删除</button>
-  `;
-  el.appendChild(div);
-}
-
-function saveSettings(){
-  const data = {
-    api_key: document.getElementById('setApiKey').value.trim(),
-    api_base: document.getElementById('setApiBase').value.trim(),
-    api_model: document.getElementById('setApiModel').value.trim(),
-    min_size_kb: parseInt(document.getElementById('setMinSize').value)||1,
-    file_types: document.getElementById('setFileTypes').value,
-  };
-  // Collect keywords
-  const keywords = {};
-  document.querySelectorAll('#keywordRows .keyword-row').forEach(row=>{
-    const cat = row.querySelector('.cat-name').value.trim();
-    const kws = row.querySelector('.kw-input').value.trim();
-    if(cat && kws){
-      keywords[cat] = kws.split(/[,，]/).map(s=>s.trim()).filter(Boolean);
-    }
-  });
-  data.organize_keywords = keywords;
-
-  fetch('/api/config', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify(data)
-  }).then(r=>r.json()).then(()=>{
-    // Also save keywords separately
-    return fetch('/api/organize/keywords', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify(keywords)
-    });
-  }).then(()=>{
-    closeSettings();
-    toast('设置已保存', 'success');
-  });
-}
-
-// ─── Utils ───
-function showOpProgress(title, total){
-  document.getElementById('opProgressTitle').textContent = title;
-  document.getElementById('opProgressFill').style.width = '0%';
-  document.getElementById('opProgressText').textContent = `0 / ${total}`;
-  document.getElementById('opProgressOverlay').classList.add('show');
-}
-function updateOpProgress(idx, total, path){
-  const pct = Math.round(idx/total*100);
-  document.getElementById('opProgressFill').style.width = pct+'%';
-  document.getElementById('opProgressText').textContent =
-    `${idx} / ${total} · ${path ? path.split('\\').pop() : ''}`;
-}
-function hideOpProgress(){
-  document.getElementById('opProgressOverlay').classList.remove('show');
-}
-
-function formatSize(n){
-  for(const u of ['B','KB','MB','GB','TB']){
-    if(n<1024) return n.toFixed(1)+' '+u;
-    n/=1024;
-  }
-  return (n).toFixed(1)+' PB';
-}
-
-function closeModal(id){
-  document.getElementById(id).classList.remove('show');
-}
-
-function toast(msg, type){
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.className = 'toast show '+ (type||'');
-  setTimeout(()=>t.classList.remove('show'), 3000);
-}
+  apply(localStorage.getItem(KEY) || 'cinnabar');
+})();
 </script>
+<script src="/app.js"></script>
