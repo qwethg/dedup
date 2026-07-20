@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-FileDedup - 文件去重工具后端
-Flask local HTTP server for file deduplication tool.
+文件整理、清理器 - 后端
+Flask local HTTP server for file deduplication and organization tool.
 """
 import os
 import sys
@@ -41,6 +41,16 @@ DEFAULT_CONFIG = {
     "scan_mode": "exact",
     "min_size_kb": 1,
     "file_types": "work",
+    "organize_keywords": {
+        "会议纪要": ["会议纪要", "纪要", "会议记录", "会议", "meeting", "minutes"],
+        "通知文件": ["通知", "公告", "通报", "批复"],
+        "设计文件": ["设计图", "施工图", "图纸", "平面图", "布置图", "接线图", "系统图", "原理图", "方案"],
+        "变更文件": ["变更", "变更设计", "变更通知"],
+        "合同文件": ["合同", "协议", "招标", "投标", "中标"],
+        "报告文件": ["报告", "总结", "汇报", "分析", "研究"],
+        "规章制度": ["规程", "规范", "制度", "办法", "规定", "细则"],
+    },
+    "organize_exts": [".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".dwg", ".dxf", ".txt", ".csv", ".rtf", ".wps", ".vsd", ".vsdx", ".mpp"],
 }
 
 # ─── File type presets ───
@@ -53,7 +63,7 @@ FILE_TYPE_PRESETS = {
     "all": None  # None = no filter
 }
 
-# ─── Scan state ───
+# ─── Scan state (dedup) ───
 scan_state = {
     "scanning": False,
     "progress": 0,
@@ -63,6 +73,23 @@ scan_state = {
     "error": None,
 }
 scan_lock = threading.Lock()
+
+# ─── Organize state ───
+organize_state = {
+    "scanning": False,
+    "progress": 0,
+    "total": 0,
+    "current_path": "",
+    "result": None,
+    "error": None,
+}
+organize_lock = threading.Lock()
+
+# ─── Organize file types ───
+ORGANIZE_DEFAULT_EXTS = [
+    ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx",
+    ".dwg", ".dxf", ".txt", ".csv", ".rtf", ".wps", ".vsd", ".vsdx", ".mpp"
+]
 
 
 # ─── Folder stats cache (avoid re-walking on every GET /api/folders) ───
@@ -301,6 +328,111 @@ def scan_thread(cfg):
         scan_state["scanning"] = False
 
 
+# ─── Organize scan ───
+
+def classify_file(fname, keywords_cfg):
+    """Classify a file by matching its name against keyword categories."""
+    name_lower = fname.lower()
+    for category, keywords in keywords_cfg.items():
+        for kw in keywords:
+            if kw.lower() in name_lower:
+                return category
+    return "其他"
+
+
+def organize_scan_thread(cfg):
+    """Scan folders and classify files by keyword categories."""
+    try:
+        organize_state["scanning"] = True
+        organize_state["progress"] = 0
+        organize_state["total"] = 0
+        organize_state["error"] = None
+        organize_state["result"] = None
+
+        allowed_exts = set(cfg.get("organize_exts", ORGANIZE_DEFAULT_EXTS))
+        keywords_cfg = cfg.get("organize_keywords", {})
+
+        # Pre-count
+        for folder in cfg.get("folders", []):
+            fpath = folder["path"]
+            if not os.path.isdir(fpath):
+                continue
+            for root, dirs, filenames in os.walk(fpath):
+                for fname in filenames:
+                    organize_state["total"] += 1
+
+        all_files = []
+        for folder in cfg.get("folders", []):
+            fpath = folder["path"]
+            label = folder.get("label", fpath)
+            if not os.path.isdir(fpath):
+                continue
+            for root, dirs, filenames in os.walk(fpath):
+                for fname in filenames:
+                    organize_state["current_path"] = os.path.join(root, fname)
+                    organize_state["progress"] += 1
+                    _, ext = os.path.splitext(fname)
+                    ext_lower = ext.lower()
+                    if ext_lower not in allowed_exts:
+                        continue
+                    try:
+                        fpath_full = os.path.normpath(os.path.join(root, fname))
+                        fsize = os.path.getsize(fpath_full)
+                        mtime = os.path.getmtime(fpath_full)
+                        category = classify_file(fname, keywords_cfg)
+                        protected = is_protected(fpath_full, cfg)
+                        file_label = label if not protected else f"🔒 {label}"
+                        all_files.append({
+                            "id": f"o_{len(all_files)}",
+                            "name": fname,
+                            "path": fpath_full,
+                            "size": fsize,
+                            "ext": ext_lower,
+                            "mtime": mtime,
+                            "mtime_str": datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M"),
+                            "source": file_label,
+                            "protected": protected,
+                            "category": category,
+                            "month": os.path.basename(root),
+                        })
+                    except Exception:
+                        continue
+
+        # Group by category
+        categories_dict = defaultdict(list)
+        for f in all_files:
+            categories_dict[f["category"]].append(f)
+
+        # Build result
+        result_categories = []
+        for cat, files in categories_dict.items():
+            files.sort(key=lambda x: x["mtime"], reverse=True)
+            total_size = sum(f["size"] for f in files)
+            result_categories.append({
+                "category": cat,
+                "count": len(files),
+                "total_size": total_size,
+                "total_size_str": format_size(total_size),
+                "files": files,
+            })
+
+        # Sort categories by count descending, "其他" always last
+        result_categories.sort(key=lambda x: x["count"], reverse=True)
+        result_categories = [c for c in result_categories if c["category"] != "其他"] + \
+                           [c for c in result_categories if c["category"] == "其他"]
+
+        organize_state["result"] = {
+            "categories": result_categories,
+            "total_files": len(all_files),
+            "total_categories": len(result_categories),
+            "scan_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        }
+    except Exception as e:
+        organize_state["error"] = str(e)
+    finally:
+        organize_state["scanning"] = False
+
+
 # ─── Routes ───
 
 @app.route('/')
@@ -322,7 +454,7 @@ def get_config():
 def update_config():
     cfg = load_config()
     data = request.json
-    for k in ["api_key", "api_base", "api_model", "scan_mode", "min_size_kb", "file_types"]:
+    for k in ["api_key", "api_base", "api_model", "scan_mode", "min_size_kb", "file_types", "organize_keywords", "organize_exts"]:
         if k in data:
             if k == "api_key" and data[k] == "***":
                 continue
@@ -686,6 +818,54 @@ def quick_rule():
     return jsonify({"selections": selections})
 
 
+@app.route('/api/organize/scan', methods=['POST'])
+def start_organize_scan():
+    cfg = load_config()
+    with organize_lock:
+        if organize_state["scanning"]:
+            return jsonify({"error": "正在扫描中..."}), 400
+    t = threading.Thread(target=organize_scan_thread, args=(cfg,))
+    t.daemon = True
+    t.start()
+    return jsonify({"ok": True})
+
+
+@app.route('/api/organize/status', methods=['GET'])
+def organize_status():
+    return jsonify({
+        "scanning": organize_state["scanning"],
+        "progress": organize_state["progress"],
+        "total": organize_state["total"],
+        "current_path": organize_state["current_path"],
+        "error": organize_state["error"],
+        "has_result": organize_state["result"] is not None,
+    })
+
+
+@app.route('/api/organize/result', methods=['GET'])
+def organize_result():
+    if organize_state["result"]:
+        return jsonify(organize_state["result"])
+    return jsonify({"categories": [], "total_files": 0})
+
+
+@app.route('/api/organize/keywords', methods=['GET'])
+def get_organize_keywords():
+    cfg = load_config()
+    return jsonify(cfg.get("organize_keywords", {}))
+
+
+@app.route('/api/organize/keywords', methods=['POST'])
+def update_organize_keywords():
+    cfg = load_config()
+    data = request.json
+    if not isinstance(data, dict):
+        return jsonify({"error": "无效格式"}), 400
+    cfg["organize_keywords"] = data
+    save_config(cfg)
+    return jsonify({"ok": True})
+
+
 @app.route('/api/export', methods=['GET'])
 def export_data():
     fmt = request.args.get("format", "json")
@@ -743,7 +923,7 @@ def get_log():
 
 def main():
     port = 18739
-    print(f"FileDedup 服务启动中... http://localhost:{port}")
+    print(f"文件整理、清理器服务启动中... http://localhost:{port}")
     # Open browser after slight delay
     def open_browser():
         time.sleep(1)

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>文件去重 · FileDedup</title>
+<title>文件整理、清理器</title>
 <style>
 :root {
   --bg: #1a1a2e;
@@ -48,6 +48,20 @@ body {
 .btn-danger:hover { background: var(--danger-hover); }
 .btn-sm { padding: 4px 10px; font-size: 12px; }
 .btn:disabled { opacity: .4; cursor: not-allowed; }
+
+/* ─── Tabs ─── */
+.tabs {
+  display: flex; gap: 0; margin-bottom: 20px; border-bottom: 2px solid var(--border);
+}
+.tab {
+  padding: 10px 24px; cursor: pointer; font-size: 14px; font-weight: 500;
+  color: var(--text-dim); border-bottom: 2px solid transparent; margin-bottom: -2px;
+  transition: all .15s;
+}
+.tab:hover { color: var(--text); }
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.tab-content { display: none; }
+.tab-content.active { display: block; }
 
 /* ─── Layout ─── */
 .container { max-width: 1200px; margin: 0 auto; padding: 24px; }
@@ -145,7 +159,7 @@ body {
 }
 .add-folder-row input:focus { border-color: var(--accent); }
 
-/* ─── Group Cards ─── */
+/* ─── Group Cards (dedup) ─── */
 .groups { display: flex; flex-direction: column; gap: 12px; }
 .group-card {
   background: var(--surface); border: 1px solid var(--border);
@@ -187,6 +201,27 @@ body {
   font-size: 11px; padding: 1px 6px; border-radius: 4px;
   background: rgba(80,250,123,.1); color: var(--success);
 }
+
+/* ─── Category Cards (organize) ─── */
+.category-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); overflow: hidden;
+}
+.category-header {
+  padding: 12px 16px; display: flex; align-items: center;
+  justify-content: space-between; background: var(--surface2);
+  cursor: pointer;
+}
+.category-header .title { display: flex; align-items: center; gap: 8px; }
+.category-header .cname { font-weight: 600; font-size: 14px; }
+.category-header .badge {
+  font-size: 10px; padding: 1px 6px; border-radius: 4px;
+  background: var(--bg); color: var(--text-dim);
+}
+.category-header .meta { font-size: 12px; color: var(--text-dim); }
+.category-header .size { color: var(--accent); font-weight: 600; font-size: 13px; }
+.category-body { display: none; }
+.category-body.expanded { display: block; }
 
 /* ─── Action Bar ─── */
 .action-bar {
@@ -250,7 +285,8 @@ body {
 .settings-panel.show { display: flex; }
 .settings-box {
   background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius); padding: 24px; min-width: 450px; max-width: 520px;
+  border-radius: var(--radius); padding: 24px; min-width: 450px; max-width: 560px;
+  max-height: 80vh; overflow-y: auto;
 }
 .settings-box h3 { margin-bottom: 16px; }
 .setting-row { margin-bottom: 14px; }
@@ -261,6 +297,19 @@ body {
   font-size: 14px; outline: none;
 }
 .setting-row input:focus, .setting-row select:focus { border-color: var(--accent); }
+.setting-section {
+  margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border);
+}
+.setting-section h4 { font-size: 14px; margin-bottom: 12px; color: var(--accent); }
+.keyword-row {
+  display: flex; gap: 8px; align-items: center; margin-bottom: 8px;
+}
+.keyword-row input {
+  flex: 1; padding: 6px 10px; background: var(--bg); border: 1px solid var(--border);
+  border-radius: 6px; color: var(--text); font-size: 13px; outline: none;
+}
+.keyword-row .cat-name { font-size: 13px; font-weight: 500; min-width: 80px; }
+.keyword-row .kw-input { flex: 1; }
 
 /* ─── Toast ─── */
 .toast {
@@ -292,7 +341,7 @@ body {
 <body>
 
 <div class="header">
-  <h1>📁 <span>FileDedup</span> 文件去重</h1>
+  <h1>📁 <span>文件整理</span>、清理器</h1>
   <div class="header-actions">
     <button class="btn btn-sm" onclick="exportData('json')">导出JSON</button>
     <button class="btn btn-sm" onclick="exportData('csv')">导出CSV</button>
@@ -303,7 +352,7 @@ body {
 
 <div class="container">
 
-  <!-- Folder Panel -->
+  <!-- Folder Panel (shared) -->
   <div class="folder-panel">
     <div class="folder-panel-header" onclick="toggleFolderPanel()">
       <h2>📁 扫描文件夹</h2>
@@ -321,61 +370,98 @@ body {
     </div>
   </div>
 
-  <!-- Scan Button -->
-  <div style="margin-bottom:20px;text-align:center;display:flex;gap:12px;justify-content:center;align-items:center">
-    <button class="btn btn-primary" onclick="startScan()" id="scanBtn" style="padding:10px 40px;font-size:15px">🔍 开始扫描</button>
-    <button class="btn" onclick="startScan()" id="refreshBtn" style="display:none;padding:10px 20px;font-size:14px">🔄 刷新</button>
+  <!-- Tabs -->
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('dedup')">🔍 重复清理</div>
+    <div class="tab" onclick="switchTab('organize')">📁 文件整理</div>
   </div>
 
-  <!-- Stats -->
-  <div class="stats" id="statsArea" style="display:none">
-    <div class="stat-card"><div class="val" id="statTotal">0</div><div class="label">总文件</div></div>
-    <div class="stat-card danger"><div class="val" id="statGroups">0</div><div class="label">重复组</div></div>
-    <div class="stat-card danger"><div class="val" id="statDupFiles">0</div><div class="label">重复文件</div></div>
-    <div class="stat-card success"><div class="val" id="statSavings">0</div><div class="label">可节省</div></div>
-  </div>
+  <!-- ═══ DEDUP TAB ═══ -->
+  <div class="tab-content active" id="tabDedup">
+    <div style="margin-bottom:20px;text-align:center;display:flex;gap:12px;justify-content:center;align-items:center">
+      <button class="btn btn-primary" onclick="startScan()" id="scanBtn" style="padding:10px 40px;font-size:15px">🔍 扫描重复文件</button>
+      <button class="btn" onclick="startScan()" id="refreshBtn" style="display:none;padding:10px 20px;font-size:14px">🔄 刷新</button>
+    </div>
 
-  <!-- Toolbar -->
-  <div class="toolbar" id="toolbar" style="display:none">
-    <div class="toolbar-row">
-      <input class="search-input" id="searchInput" placeholder="🔍 搜索文件名..." oninput="renderGroups()">
-      <select class="select" id="sortSelect" onchange="renderGroups()">
-        <option value="savings">可节省空间↓</option>
-        <option value="count">文件数量↓</option>
-        <option value="name">文件名</option>
-        <option value="time">修改时间↓</option>
-      </select>
-      <select class="select" id="modeSelect" onchange="changeMode()">
-        <option value="exact">精确模式 (名+大小)</option>
-        <option value="content">内容模式 (MD5)</option>
-        <option value="similar">相似模式 (同名)</option>
-      </select>
+    <div class="stats" id="statsArea" style="display:none">
+      <div class="stat-card"><div class="val" id="statTotal">0</div><div class="label">总文件</div></div>
+      <div class="stat-card danger"><div class="val" id="statGroups">0</div><div class="label">重复组</div></div>
+      <div class="stat-card danger"><div class="val" id="statDupFiles">0</div><div class="label">重复文件</div></div>
+      <div class="stat-card success"><div class="val" id="statSavings">0</div><div class="label">可节省</div></div>
     </div>
-    <div class="toolbar-row">
-      <div class="filter-chips" id="extChips"></div>
-    </div>
-    <div class="toolbar-row">
-      <div class="quick-rules">
-        <span class="quick-rules-label">快捷规则:</span>
-        <button class="btn btn-sm" onclick="applyQuickRule('keep_newest')">保留最新</button>
-        <button class="btn btn-sm" onclick="applyQuickRule('keep_oldest')">保留最旧</button>
-        <select class="select btn-sm" id="keepLabelSelect" style="font-size:12px">
-          <option value="">保留指定来源...</option>
+
+    <div class="toolbar" id="toolbar" style="display:none">
+      <div class="toolbar-row">
+        <input class="search-input" id="searchInput" placeholder="🔍 搜索文件名..." oninput="renderGroups()">
+        <select class="select" id="sortSelect" onchange="renderGroups()">
+          <option value="savings">可节省空间↓</option>
+          <option value="count">文件数量↓</option>
+          <option value="name">文件名</option>
+          <option value="time">修改时间↓</option>
         </select>
-        <button class="btn btn-sm" onclick="applyQuickRule('keep_label')">应用</button>
-        <button class="btn btn-sm" onclick="clearSelections()">清空勾选</button>
+        <select class="select" id="modeSelect" onchange="changeMode()">
+          <option value="exact">精确模式 (名+大小)</option>
+          <option value="content">内容模式 (MD5)</option>
+          <option value="similar">相似模式 (同名)</option>
+        </select>
+      </div>
+      <div class="toolbar-row">
+        <div class="filter-chips" id="extChips"></div>
+      </div>
+      <div class="toolbar-row">
+        <div class="quick-rules">
+          <span class="quick-rules-label">快捷规则:</span>
+          <button class="btn btn-sm" onclick="applyQuickRule('keep_newest')">保留最新</button>
+          <button class="btn btn-sm" onclick="applyQuickRule('keep_oldest')">保留最旧</button>
+          <select class="select btn-sm" id="keepLabelSelect" style="font-size:12px">
+            <option value="">保留指定来源...</option>
+          </select>
+          <button class="btn btn-sm" onclick="applyQuickRule('keep_label')">应用</button>
+          <button class="btn btn-sm" onclick="clearSelections()">清空勾选</button>
+        </div>
+      </div>
+      <div class="ai-box">
+        <span class="ai-badge">AI</span>
+        <input class="ai-input" id="aiInput" placeholder="用自然语言描述规则，如：保留企业微信的，删其他的">
+        <button class="btn btn-sm btn-primary" onclick="applyAI()" id="aiBtn">执行</button>
+      </div>
+      <div class="ai-understanding" id="aiUnderstanding"></div>
+    </div>
+
+    <div class="groups" id="groupsArea"></div>
+  </div>
+
+  <!-- ═══ ORGANIZE TAB ═══ -->
+  <div class="tab-content" id="tabOrganize">
+    <div style="margin-bottom:20px;text-align:center;display:flex;gap:12px;justify-content:center;align-items:center">
+      <button class="btn btn-primary" onclick="startOrganizeScan()" id="orgScanBtn" style="padding:10px 40px;font-size:15px">📁 整理文件</button>
+      <button class="btn" onclick="startOrganizeScan()" id="orgRefreshBtn" style="display:none;padding:10px 20px;font-size:14px">🔄 刷新</button>
+    </div>
+
+    <div class="stats" id="orgStatsArea" style="display:none">
+      <div class="stat-card"><div class="val" id="orgStatTotal">0</div><div class="label">总文件</div></div>
+      <div class="stat-card"><div class="val" id="orgStatCats">0</div><div class="label">分类数</div></div>
+      <div class="stat-card success"><div class="val" id="orgStatSize">0</div><div class="label">总大小</div></div>
+      <div class="stat-card"><div class="val" id="orgStatSelected">0</div><div class="label">已选</div></div>
+    </div>
+
+    <div class="toolbar" id="orgToolbar" style="display:none">
+      <div class="toolbar-row">
+        <input class="search-input" id="orgSearchInput" placeholder="🔍 搜索文件名..." oninput="renderCategories()">
+        <div class="filter-chips" id="orgExtChips"></div>
+      </div>
+      <div class="toolbar-row">
+        <div class="quick-rules">
+          <button class="btn btn-sm" onclick="orgSelectAll()">全选</button>
+          <button class="btn btn-sm" onclick="orgSelectNone()">取消全选</button>
+          <button class="btn btn-sm" onclick="orgSelectCategory()">选中当前分类</button>
+          <span style="font-size:12px;color:var(--text-dim);margin-left:8px">提示：点击分类标题展开/折叠</span>
+        </div>
       </div>
     </div>
-    <div class="ai-box">
-      <span class="ai-badge">AI</span>
-      <input class="ai-input" id="aiInput" placeholder="用自然语言描述规则，如：保留企业微信的，删其他的">
-      <button class="btn btn-sm btn-primary" onclick="applyAI()" id="aiBtn">执行</button>
-    </div>
-    <div class="ai-understanding" id="aiUnderstanding"></div>
-  </div>
 
-  <!-- Groups -->
-  <div class="groups" id="groupsArea"></div>
+    <div class="groups" id="categoriesArea"></div>
+  </div>
 
 </div>
 
@@ -395,7 +481,7 @@ body {
 <!-- Progress Overlay -->
 <div class="progress-overlay" id="progressOverlay">
   <div class="progress-box">
-    <div style="font-size:16px;font-weight:600">扫描中...</div>
+    <div style="font-size:16px;font-weight:600" id="progressTitle">扫描中...</div>
     <div class="progress-bar"><div class="fill" id="progressFill"></div></div>
     <div class="progress-text" id="progressText">准备中...</div>
   </div>
@@ -428,6 +514,9 @@ body {
     <h3>移动文件</h3>
     <div class="desc">将 <span id="moveCount" style="color:var(--accent);font-weight:600">0</span> 个文件移动到指定文件夹。同名文件自动加后缀。</div>
     <input type="text" id="moveDestInput" placeholder="目标文件夹路径..." style="width:100%;margin-bottom:12px">
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <button class="btn btn-sm" onclick="pickMoveDest()">📂 浏览</button>
+    </div>
     <div class="modal-actions">
       <button class="btn" onclick="closeModal('moveModal')">取消</button>
       <button class="btn btn-primary" onclick="executeMove()">移动</button>
@@ -462,6 +551,14 @@ body {
         <option value="all">全部文件</option>
       </select>
     </div>
+
+    <div class="setting-section">
+      <h4>📁 整理关键词配置</h4>
+      <div style="font-size:12px;color:var(--text-dim);margin-bottom:12px">每行一个分类，关键词用逗号分隔。文件名包含关键词即归入该分类。</div>
+      <div id="keywordRows"></div>
+      <button class="btn btn-sm" onclick="addKeywordRow()" style="margin-top:8px">+ 添加分类</button>
+    </div>
+
     <div class="modal-actions">
       <button class="btn" onclick="closeSettings()">取消</button>
       <button class="btn btn-primary" onclick="saveSettings()">保存</button>
@@ -487,26 +584,53 @@ body {
 <script>
 // ─── State ───
 let scanResult = null;
-let selectedFiles = new Set();
+let organizeResult = null;
+let selectedFiles = new Set();      // dedup selections
+let orgSelectedFiles = new Set();   // organize selections
 let currentFilter = '';
+let orgCurrentFilter = '';
 let folderCollapsed = false;
+let currentTab = 'dedup';
 
 // ─── Init ───
 document.addEventListener('DOMContentLoaded', () => {
   loadConfig();
   loadFolders();
   loadPresets();
-  // Check if there's a previous result
+  // Check previous dedup result
   fetch('/api/scan/result').then(r=>r.json()).then(d=>{
     if(d.groups && d.groups.length>=0 && d.total_files>0){
       scanResult = d;
       renderAll();
     }
   });
+  // Check previous organize result
+  fetch('/api/organize/result').then(r=>r.json()).then(d=>{
+    if(d.categories && d.total_files>0){
+      organizeResult = d;
+      renderOrganizeAll();
+    }
+  });
   // Mode select
   const cfgMode = localStorage.getItem('scan_mode');
   if(cfgMode) document.getElementById('modeSelect').value = cfgMode;
 });
+
+// ─── Tab Switch ───
+function switchTab(tab){
+  currentTab = tab;
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
+  if(tab==='dedup'){
+    document.querySelectorAll('.tab')[0].classList.add('active');
+    document.getElementById('tabDedup').classList.add('active');
+  } else {
+    document.querySelectorAll('.tab')[1].classList.add('active');
+    document.getElementById('tabOrganize').classList.add('active');
+  }
+  // Update action bar context
+  updateActionBar();
+}
 
 function loadConfig(){
   fetch('/api/config').then(r=>r.json()).then(cfg=>{
@@ -562,7 +686,6 @@ function renderFolders(folders){
       </div>
     </div>`;
   }).join('');
-  // Bind events
   el.querySelectorAll('button[data-action]').forEach(btn=>{
     btn.addEventListener('click', e=>{
       const item = e.target.closest('.folder-item');
@@ -619,10 +742,13 @@ function toggleFolderPanel(){
   toggle.textContent = folderCollapsed ? '▸' : '▾';
 }
 
-// ─── Scan ───
+// ══════════════════════════════════════════
+// ─── DEDUP: Scan ───
+// ══════════════════════════════════════════
 function startScan(){
   fetch('/api/scan', {method:'POST'}).then(r=>r.json()).then(d=>{
     if(d.error) return toast(d.error, 'error');
+    document.getElementById('progressTitle').textContent = '扫描重复文件中...';
     document.getElementById('progressOverlay').classList.add('show');
     pollScan();
   });
@@ -654,7 +780,7 @@ function fetchResult(){
   });
 }
 
-// ─── Render ───
+// ─── DEDUP: Render ───
 function renderAll(){
   if(!scanResult) return;
   document.getElementById('statsArea').style.display='grid';
@@ -662,18 +788,14 @@ function renderAll(){
   document.getElementById('refreshBtn').style.display = '';
   updateStats();
 
-  // Ext chips
   const exts = {};
-  scanResult.groups.forEach(g=>{
-    exts[g.ext] = (exts[g.ext]||0) + 1;
-  });
+  scanResult.groups.forEach(g=>{ exts[g.ext] = (exts[g.ext]||0) + 1; });
   const chipEl = document.getElementById('extChips');
   chipEl.innerHTML = '<span class="chip active" data-ext="" onclick="filterExt(this)">全部</span>' +
     Object.entries(exts).sort((a,b)=>b[1]-a[1]).map(([ext,n])=>
       `<span class="chip" data-ext="${ext}" onclick="filterExt(this)">${ext.replace('.','').toUpperCase()} (${n})</span>`
     ).join('');
 
-  // Keep label select
   const sources = new Set();
   scanResult.groups.forEach(g=>g.files.forEach(f=>sources.add(f.source.replace('🔒 ',''))));
   document.getElementById('keepLabelSelect').innerHTML =
@@ -688,16 +810,8 @@ function renderGroups(){
   const search = document.getElementById('searchInput').value.toLowerCase();
   const sort = document.getElementById('sortSelect').value;
   let groups = [...scanResult.groups];
-
-  // Filter
-  if(currentFilter){
-    groups = groups.filter(g=>g.ext === currentFilter);
-  }
-  if(search){
-    groups = groups.filter(g=>g.filename.toLowerCase().includes(search));
-  }
-
-  // Sort
+  if(currentFilter) groups = groups.filter(g=>g.ext === currentFilter);
+  if(search) groups = groups.filter(g=>g.filename.toLowerCase().includes(search));
   if(sort==='savings') groups.sort((a,b)=>b.savings-a.savings);
   else if(sort==='count') groups.sort((a,b)=>b.count-a.count);
   else if(sort==='name') groups.sort((a,b)=>a.filename.localeCompare(b.filename));
@@ -708,7 +822,6 @@ function renderGroups(){
     el.innerHTML = '<div class="empty"><div class="icon">🎉</div><div>没有找到重复文件</div></div>';
     return;
   }
-
   el.innerHTML = groups.map(g=>`
     <div class="group-card">
       <div class="group-header">
@@ -736,7 +849,6 @@ function renderGroups(){
       `).join('')}
     </div>
   `).join('');
-
   updateActionBar();
 }
 
@@ -758,7 +870,7 @@ function changeMode(){
   });
 }
 
-// ─── Selection ───
+// ─── DEDUP: Selection ───
 function toggleSelect(cb){
   const id = cb.dataset.id;
   if(cb.checked) selectedFiles.add(id);
@@ -767,29 +879,35 @@ function toggleSelect(cb){
 }
 
 function clearSelections(){
-  selectedFiles.clear();
-  document.querySelectorAll('.file-row input[type=checkbox]').forEach(cb=>cb.checked=false);
+  if(currentTab==='dedup'){
+    selectedFiles.clear();
+    document.querySelectorAll('#tabDedup .file-row input[type=checkbox]').forEach(cb=>cb.checked=false);
+  } else {
+    orgSelectedFiles.clear();
+    document.querySelectorAll('#tabOrganize .file-row input[type=checkbox]').forEach(cb=>cb.checked=false);
+  }
   updateActionBar();
 }
 
 function updateActionBar(){
-  const count = selectedFiles.size;
+  const count = currentTab==='dedup' ? selectedFiles.size : orgSelectedFiles.size;
   const bar = document.getElementById('actionBar');
   if(count > 0){
     bar.classList.add('show');
     document.getElementById('selCount').textContent = count;
-    // Calc size
     let size = 0;
-    scanResult.groups.forEach(g=>g.files.forEach(f=>{
-      if(selectedFiles.has(f.id)) size += f.size;
-    }));
+    if(currentTab==='dedup' && scanResult){
+      scanResult.groups.forEach(g=>g.files.forEach(f=>{ if(selectedFiles.has(f.id)) size += f.size; }));
+    } else if(currentTab==='organize' && organizeResult){
+      organizeResult.categories.forEach(c=>c.files.forEach(f=>{ if(orgSelectedFiles.has(f.id)) size += f.size; }));
+    }
     document.getElementById('selSize').textContent = '· ' + formatSize(size);
   } else {
     bar.classList.remove('show');
   }
 }
 
-// ─── Quick Rules ───
+// ─── DEDUP: Quick Rules ───
 function applyQuickRule(rule){
   if(!scanResult) return;
   const label = document.getElementById('keepLabelSelect').value;
@@ -804,14 +922,13 @@ function applyQuickRule(rule){
   });
 }
 
-// ─── AI ───
+// ─── DEDUP: AI ───
 function applyAI(){
   const text = document.getElementById('aiInput').value.trim();
   if(!text) return;
   if(!scanResult) return toast('请先扫描', 'error');
   document.getElementById('aiBtn').disabled = true;
   document.getElementById('aiBtn').textContent = '分析中...';
-
   fetch('/api/ai', {
     method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({text, groups: scanResult.groups})
@@ -819,13 +936,9 @@ function applyAI(){
     document.getElementById('aiBtn').disabled = false;
     document.getElementById('aiBtn').textContent = '执行';
     if(d.error) return toast(d.error, 'error');
-
-    // Show understanding
     const ue = document.getElementById('aiUnderstanding');
     ue.style.display = 'block';
     ue.textContent = '🤖 AI理解: ' + (d.understanding || '(无说明)');
-
-    // Apply selections
     if(d.selections && Array.isArray(d.selections)){
       selectedFiles.clear();
       d.selections.forEach(id=>selectedFiles.add(id));
@@ -839,12 +952,192 @@ function applyAI(){
   });
 }
 
-// ─── Delete / Move ───
+// ══════════════════════════════════════════
+// ─── ORGANIZE: Scan ───
+// ══════════════════════════════════════════
+function startOrganizeScan(){
+  fetch('/api/organize/scan', {method:'POST'}).then(r=>r.json()).then(d=>{
+    if(d.error) return toast(d.error, 'error');
+    document.getElementById('progressTitle').textContent = '整理扫描中...';
+    document.getElementById('progressOverlay').classList.add('show');
+    pollOrganizeScan();
+  });
+}
+
+function pollOrganizeScan(){
+  fetch('/api/organize/status').then(r=>r.json()).then(s=>{
+    const pct = s.total > 0 ? Math.min(100, Math.round(s.progress/s.total*100)) : 0;
+    document.getElementById('progressFill').style.width = pct+'%';
+    document.getElementById('progressText').textContent =
+      `${s.progress} / ${s.total} · ${s.current_path ? s.current_path.split('\\').pop() : ''}`;
+    if(s.scanning){
+      setTimeout(pollOrganizeScan, 300);
+    } else {
+      document.getElementById('progressOverlay').classList.remove('show');
+      if(s.error){
+        toast(s.error, 'error');
+      } else if(s.has_result){
+        fetchOrganizeResult();
+      }
+    }
+  });
+}
+
+function fetchOrganizeResult(){
+  fetch('/api/organize/result').then(r=>r.json()).then(d=>{
+    organizeResult = d;
+    renderOrganizeAll();
+  });
+}
+
+// ─── ORGANIZE: Render ───
+function renderOrganizeAll(){
+  if(!organizeResult) return;
+  document.getElementById('orgStatsArea').style.display='grid';
+  document.getElementById('orgToolbar').style.display='block';
+  document.getElementById('orgRefreshBtn').style.display = '';
+  // Update stats
+  document.getElementById('orgStatTotal').textContent = organizeResult.total_files;
+  document.getElementById('orgStatCats').textContent = organizeResult.total_categories;
+  let totalSize = 0;
+  organizeResult.categories.forEach(c=>totalSize += c.total_size);
+  document.getElementById('orgStatSize').textContent = formatSize(totalSize);
+  document.getElementById('orgStatSelected').textContent = orgSelectedFiles.size;
+
+  // Ext chips
+  const exts = {};
+  organizeResult.categories.forEach(c=>c.files.forEach(f=>{ exts[f.ext] = (exts[f.ext]||0) + 1; }));
+  const chipEl = document.getElementById('orgExtChips');
+  chipEl.innerHTML = '<span class="chip active" data-ext="" onclick="orgFilterExt(this)">全部</span>' +
+    Object.entries(exts).sort((a,b)=>b[1]-a[1]).map(([ext,n])=>
+      `<span class="chip" data-ext="${ext}" onclick="orgFilterExt(this)">${ext.replace('.','').toUpperCase()} (${n})</span>`
+    ).join('');
+
+  renderCategories();
+}
+
+function renderCategories(){
+  if(!organizeResult) return;
+  const search = document.getElementById('orgSearchInput').value.toLowerCase();
+  let categories = [...organizeResult.categories];
+
+  // Filter by ext
+  if(orgCurrentFilter){
+    categories = categories.map(c=>({...c, files:c.files.filter(f=>f.ext===orgCurrentFilter)}))
+                           .filter(c=>c.files.length > 0);
+  }
+  // Filter by search
+  if(search){
+    categories = categories.map(c=>({...c, files:c.files.filter(f=>f.name.toLowerCase().includes(search))}))
+                           .filter(c=>c.files.length > 0);
+  }
+
+  const el = document.getElementById('categoriesArea');
+  if(!categories.length){
+    el.innerHTML = '<div class="empty"><div class="icon">📁</div><div>没有找到文件</div></div>';
+    return;
+  }
+
+  el.innerHTML = categories.map((c,ci)=>{
+    const selCount = c.files.filter(f=>orgSelectedFiles.has(f.id)).length;
+    return `
+    <div class="category-card">
+      <div class="category-header" onclick="toggleCategoryBody(${ci})">
+        <div class="title">
+          <span class="cname">${c.category}</span>
+          <span class="badge">${c.count} 个文件</span>
+          ${selCount>0?`<span class="badge" style="background:rgba(78,138,255,.15);color:var(--accent)">已选 ${selCount}</span>`:''}
+        </div>
+        <div class="size">${c.total_size_str}</div>
+      </div>
+      <div class="category-body" id="catBody_${ci}">
+        ${c.files.map(f=>`
+          <div class="file-row">
+            <input type="checkbox" data-id="${f.id}" data-path="${f.path}" data-size="${f.size}"
+              ${orgSelectedFiles.has(f.id)?'checked':''}
+              ${f.protected?'style="accent-color:var(--warning)"':''}
+              onchange="toggleOrgSelect(this)">
+            <span class="f-source">${f.source}</span>
+            ${f.protected?'<span class="f-protected">🔒</span>':''}
+            <span class="f-path" title="${f.path}">${f.path}</span>
+            <span class="f-date">${f.mtime_str}</span>
+            <span class="f-size">${formatSize(f.size)}</span>
+          </div>
+        `).join('')}
+      </div>
+    </div>`;
+  }).join('');
+
+  // Auto-expand first category
+  if(categories.length > 0 && !document.getElementById('catBody_0').classList.contains('expanded')){
+    // Keep collapsed by default, user clicks to expand
+  }
+  updateOrgStats();
+}
+
+function toggleCategoryBody(idx){
+  const el = document.getElementById('catBody_'+idx);
+  if(el) el.classList.toggle('expanded');
+}
+
+function orgFilterExt(el){
+  document.querySelectorAll('#orgExtChips .chip').forEach(c=>c.classList.remove('active'));
+  el.classList.add('active');
+  orgCurrentFilter = el.dataset.ext;
+  renderCategories();
+}
+
+function toggleOrgSelect(cb){
+  const id = cb.dataset.id;
+  if(cb.checked) orgSelectedFiles.add(id);
+  else orgSelectedFiles.delete(id);
+  updateOrgStats();
+  updateActionBar();
+}
+
+function updateOrgStats(){
+  document.getElementById('orgStatSelected').textContent = orgSelectedFiles.size;
+}
+
+function orgSelectAll(){
+  if(!organizeResult) return;
+  organizeResult.categories.forEach(c=>c.files.forEach(f=>{
+    if(!f.protected) orgSelectedFiles.add(f.id);
+  }));
+  renderCategories();
+  updateActionBar();
+}
+
+function orgSelectNone(){
+  orgSelectedFiles.clear();
+  renderCategories();
+  updateActionBar();
+}
+
+function orgSelectCategory(){
+  // Select all visible (in current filter) non-protected files
+  document.querySelectorAll('#tabOrganize .file-row input[type=checkbox]').forEach(cb=>{
+    if(!cb.disabled) cb.checked = true;
+    orgSelectedFiles.add(cb.dataset.id);
+  });
+  renderCategories();
+  updateActionBar();
+}
+
+// ══════════════════════════════════════════
+// ─── Delete / Move (shared) ───
+// ══════════════════════════════════════════
 function getSelectedPaths(){
   const paths = [];
-  scanResult.groups.forEach(g=>g.files.forEach(f=>{
-    if(selectedFiles.has(f.id)) paths.push(f.path);
-  }));
+  if(currentTab==='dedup' && scanResult){
+    scanResult.groups.forEach(g=>g.files.forEach(f=>{
+      if(selectedFiles.has(f.id)) paths.push(f.path);
+    }));
+  } else if(currentTab==='organize' && organizeResult){
+    organizeResult.categories.forEach(c=>c.files.forEach(f=>{
+      if(orgSelectedFiles.has(f.id)) paths.push(f.path);
+    }));
+  }
   return paths;
 }
 
@@ -864,7 +1157,8 @@ function executeDelete(){
     if(idx >= paths.length){
       hideOpProgress();
       toast(`已删除 ${success} 个文件${failed>0?'，失败 '+failed+' 个':''}`, failed>0?'error':'success');
-      removeFilesFromUI(donePaths);
+      if(currentTab==='dedup') removeFilesFromUI(donePaths);
+      else removeOrgFilesFromUI(donePaths);
       clearSelections();
       return;
     }
@@ -888,6 +1182,15 @@ function showMoveModal(){
   document.getElementById('moveModal').classList.add('show');
 }
 
+function pickMoveDest(){
+  fetch('/api/folders/pick', {method:'POST'})
+    .then(r=>r.json())
+    .then(d=>{
+      if(d.error) return toast(d.error, 'error');
+      if(d.path) document.getElementById('moveDestInput').value = d.path;
+    });
+}
+
 function executeMove(){
   const paths = getSelectedPaths();
   const dest = document.getElementById('moveDestInput').value.trim();
@@ -900,7 +1203,8 @@ function executeMove(){
     if(idx >= paths.length){
       hideOpProgress();
       toast(`已移动 ${success} 个文件${failed>0?'，失败 '+failed+' 个':''}`, failed>0?'error':'success');
-      removeFilesFromUI(donePaths);
+      if(currentTab==='dedup') removeFilesFromUI(donePaths);
+      else removeOrgFilesFromUI(donePaths);
       clearSelections();
       return;
     }
@@ -916,6 +1220,46 @@ function executeMove(){
     }).catch(()=>{ failed++; idx++; setTimeout(moveOne, 10); });
   }
   moveOne();
+}
+
+// ─── Remove operated files from UI ───
+function removeFilesFromUI(donePaths){
+  if(!donePaths.length || !scanResult) return;
+  const doneSet = new Set(donePaths);
+  scanResult.groups.forEach(g=>{ g.files = g.files.filter(f=>!doneSet.has(f.path)); });
+  scanResult.groups = scanResult.groups.filter(g=>g.files.length > 1);
+  updateStats();
+  renderGroups();
+  document.getElementById('refreshBtn').style.display = '';
+}
+
+function removeOrgFilesFromUI(donePaths){
+  if(!donePaths.length || !organizeResult) return;
+  const doneSet = new Set(donePaths);
+  organizeResult.categories.forEach(c=>{ c.files = c.files.filter(f=>!doneSet.has(f.path)); });
+  organizeResult.categories = organizeResult.categories.filter(c=>c.files.length > 0);
+  // Recalculate
+  organizeResult.total_files = organizeResult.categories.reduce((s,c)=>s+c.files.length, 0);
+  organizeResult.total_categories = organizeResult.categories.length;
+  renderOrganizeAll();
+  document.getElementById('orgRefreshBtn').style.display = '';
+}
+
+function updateStats(){
+  if(!scanResult) return;
+  scanResult.total_dup_files = scanResult.groups.reduce((s,g)=>s+g.files.length, 0);
+  scanResult.total_groups = scanResult.groups.length;
+  let totalSavings = 0;
+  scanResult.groups.forEach(g=>{
+    const minSize = Math.min(...g.files.map(f=>f.size));
+    totalSavings += g.files.reduce((s,f)=>s+f.size, 0) - minSize;
+  });
+  scanResult.total_savings = totalSavings;
+  scanResult.total_savings_str = formatSize(totalSavings);
+  document.getElementById('statTotal').textContent = scanResult.total_files;
+  document.getElementById('statGroups').textContent = scanResult.total_groups;
+  document.getElementById('statDupFiles').textContent = scanResult.total_dup_files;
+  document.getElementById('statSavings').textContent = scanResult.total_savings_str;
 }
 
 // ─── Export ───
@@ -939,12 +1283,37 @@ function showSettings(){
     document.getElementById('setApiModel').value = cfg.api_model || 'gpt-4o-mini';
     document.getElementById('setMinSize').value = cfg.min_size_kb || 1;
     document.getElementById('setFileTypes').value = cfg.file_types || 'work';
+    // Load keywords
+    renderKeywordRows(cfg.organize_keywords || {});
     document.getElementById('settingsModal').classList.add('show');
   });
 }
 
 function closeSettings(){
   document.getElementById('settingsModal').classList.remove('show');
+}
+
+function renderKeywordRows(keywords){
+  const el = document.getElementById('keywordRows');
+  el.innerHTML = Object.entries(keywords).map(([cat, kws], i)=>`
+    <div class="keyword-row" data-idx="${i}">
+      <input type="text" class="cat-name" value="${cat}" placeholder="分类名">
+      <input type="text" class="kw-input" value="${(kws||[]).join(', ')}" placeholder="关键词，逗号分隔">
+      <button class="btn btn-sm btn-danger" onclick="this.parentElement.remove()">删除</button>
+    </div>
+  `).join('');
+}
+
+function addKeywordRow(){
+  const el = document.getElementById('keywordRows');
+  const div = document.createElement('div');
+  div.className = 'keyword-row';
+  div.innerHTML = `
+    <input type="text" class="cat-name" placeholder="分类名">
+    <input type="text" class="kw-input" placeholder="关键词，逗号分隔">
+    <button class="btn btn-sm btn-danger" onclick="this.parentElement.remove()">删除</button>
+  `;
+  el.appendChild(div);
 }
 
 function saveSettings(){
@@ -955,50 +1324,30 @@ function saveSettings(){
     min_size_kb: parseInt(document.getElementById('setMinSize').value)||1,
     file_types: document.getElementById('setFileTypes').value,
   };
+  // Collect keywords
+  const keywords = {};
+  document.querySelectorAll('#keywordRows .keyword-row').forEach(row=>{
+    const cat = row.querySelector('.cat-name').value.trim();
+    const kws = row.querySelector('.kw-input').value.trim();
+    if(cat && kws){
+      keywords[cat] = kws.split(/[,，]/).map(s=>s.trim()).filter(Boolean);
+    }
+  });
+  data.organize_keywords = keywords;
+
   fetch('/api/config', {
     method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify(data)
   }).then(r=>r.json()).then(()=>{
+    // Also save keywords separately
+    return fetch('/api/organize/keywords', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(keywords)
+    });
+  }).then(()=>{
     closeSettings();
     toast('设置已保存', 'success');
   });
-}
-
-// ─── Remove operated files from UI (no re-scan) ───
-function removeFilesFromUI(donePaths){
-  if(!donePaths.length || !scanResult) return;
-  const doneSet = new Set(donePaths);
-  // Remove files from groups
-  scanResult.groups.forEach(g=>{
-    g.files = g.files.filter(f=>!doneSet.has(f.path));
-  });
-  // Remove empty groups (groups with <=1 file are no longer duplicates)
-  scanResult.groups = scanResult.groups.filter(g=>g.files.length > 1);
-  // Update stats
-  updateStats();
-  // Re-render
-  renderGroups();
-  // Show refresh button
-  document.getElementById('refreshBtn').style.display = '';
-}
-
-function updateStats(){
-  if(!scanResult) return;
-  scanResult.total_dup_files = scanResult.groups.reduce((s,g)=>s+g.files.length, 0);
-  scanResult.total_groups = scanResult.groups.length;
-  // Recalculate savings
-  let totalSavings = 0;
-  scanResult.groups.forEach(g=>{
-    const minSize = Math.min(...g.files.map(f=>f.size));
-    totalSavings += g.files.reduce((s,f)=>s+f.size, 0) - minSize;
-  });
-  scanResult.total_savings = totalSavings;
-  scanResult.total_savings_str = formatSize(totalSavings);
-  // Update DOM
-  document.getElementById('statTotal').textContent = scanResult.total_files;
-  document.getElementById('statGroups').textContent = scanResult.total_groups;
-  document.getElementById('statDupFiles').textContent = scanResult.total_dup_files;
-  document.getElementById('statSavings').textContent = scanResult.total_savings_str;
 }
 
 // ─── Utils ───
@@ -1037,5 +1386,3 @@ function toast(msg, type){
   setTimeout(()=>t.classList.remove('show'), 3000);
 }
 </script>
-</body>
-</html>
