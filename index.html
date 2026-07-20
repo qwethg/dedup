@@ -25,7 +25,7 @@
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
   background: var(--bg); color: var(--text); line-height: 1.6;
-  -webkit-font-smoothing: antialiased; min-height: 100vh;
+  -webkit-font-smoothing: antialiased; min-height: 100vh; padding-bottom: 70px;
 }
 /* ─── Header ─── */
 .header {
@@ -355,13 +355,13 @@ body {
   <!-- Folder Panel (shared) -->
   <div class="folder-panel">
     <div class="folder-panel-header" onclick="toggleFolderPanel()">
-      <h2>📁 扫描文件夹</h2>
-      <span id="folderToggle">▾</span>
+      <h2>📁 扫描文件�?/h2>
+      <span id="folderToggle">�?/span>
     </div>
     <div class="folder-list" id="folderList">
       <div class="add-folder-row">
-        <input type="text" id="folderPath" placeholder="粘贴文件夹路径或点浏览...">
-        <input type="text" id="folderLabel" placeholder="标签(可选)" style="max-width:120px">
+        <input type="text" id="folderPath" placeholder="粘贴文件夹路径或点浏�?..">
+        <input type="text" id="folderLabel" placeholder="标签(可�?" style="max-width:120px">
         <button class="btn btn-sm" onclick="pickFolder()">📂 浏览</button>
         <button class="btn btn-sm btn-primary" onclick="addFolder()">添加</button>
       </div>
@@ -376,7 +376,7 @@ body {
     <div class="tab" onclick="switchTab('organize')">📁 文件整理</div>
   </div>
 
-  <!-- ═══ DEDUP TAB ═══ -->
+  <!-- ══�?DEDUP TAB ══�?-->
   <div class="tab-content active" id="tabDedup">
     <div style="margin-bottom:20px;text-align:center;display:flex;gap:12px;justify-content:center;align-items:center">
       <button class="btn btn-primary" onclick="startScan()" id="scanBtn" style="padding:10px 40px;font-size:15px">🔍 扫描重复文件</button>
@@ -384,23 +384,23 @@ body {
     </div>
 
     <div class="stats" id="statsArea" style="display:none">
-      <div class="stat-card"><div class="val" id="statTotal">0</div><div class="label">总文件</div></div>
-      <div class="stat-card danger"><div class="val" id="statGroups">0</div><div class="label">重复组</div></div>
+      <div class="stat-card"><div class="val" id="statTotal">0</div><div class="label">总文�?/div></div>
+      <div class="stat-card danger"><div class="val" id="statGroups">0</div><div class="label">重复�?/div></div>
       <div class="stat-card danger"><div class="val" id="statDupFiles">0</div><div class="label">重复文件</div></div>
-      <div class="stat-card success"><div class="val" id="statSavings">0</div><div class="label">可节省</div></div>
+      <div class="stat-card success"><div class="val" id="statSavings">0</div><div class="label">可节�?/div></div>
     </div>
 
     <div class="toolbar" id="toolbar" style="display:none">
       <div class="toolbar-row">
-        <input class="search-input" id="searchInput" placeholder="🔍 搜索文件名..." oninput="renderGroups()">
+        <input class="search-input" id="searchInput" placeholder="🔍 搜索文件�?.." oninput="renderGroups()">
         <select class="select" id="sortSelect" onchange="renderGroups()">
           <option value="savings">可节省空间↓</option>
-          <option value="count">文件数量↓</option>
-          <option value="name">文件名</option>
-          <option value="time">修改时间↓</option>
+          <option value="count">文件数量�?/option>
+          <option value="name">文件�?/option>
+          <option value="time">修改时间�?/option>
         </select>
         <select class="select" id="modeSelect" onchange="changeMode()">
-          <option value="exact">精确模式 (名+大小)</option>
+          <option value="exact">精确模式 (�?大小)</option>
           <option value="content">内容模式 (MD5)</option>
           <option value="similar">相似模式 (同名)</option>
         </select>
@@ -411,18 +411,18 @@ body {
       <div class="toolbar-row">
         <div class="quick-rules">
           <span class="quick-rules-label">快捷规则:</span>
-          <button class="btn btn-sm" onclick="applyQuickRule('keep_newest')">保留最新</button>
-          <button class="btn btn-sm" onclick="applyQuickRule('keep_oldest')">保留最旧</button>
+          <button class="btn btn-sm" onclick="applyQuickRule('keep_newest')">保留最�?/button>
+          <button class="btn btn-sm" onclick="applyQuickRule('keep_oldest')">保留最�?/button>
           <select class="select btn-sm" id="keepLabelSelect" style="font-size:12px">
             <option value="">保留指定来源...</option>
           </select>
           <button class="btn btn-sm" onclick="applyQuickRule('keep_label')">应用</button>
-          <button class="btn btn-sm" onclick="clearSelections()">清空勾选</button>
+          <button class="btn btn-sm" onclick="clearSelections()">清空勾�?/button>
         </div>
       </div>
       <div class="ai-box">
         <span class="ai-badge">AI</span>
-        <input class="ai-input" id="aiInput" placeholder="用自然语言描述规则，如：保留企业微信的，删其他的">
+        <input class="ai-input" id="aiInput" placeholder="用自然语言描述规则，如：保留企业微信的，删其他�?>
         <button class="btn btn-sm btn-primary" onclick="applyAI()" id="aiBtn">执行</button>
       </div>
       <div class="ai-understanding" id="aiUnderstanding"></div>
@@ -431,7 +431,7 @@ body {
     <div class="groups" id="groupsArea"></div>
   </div>
 
-  <!-- ═══ ORGANIZE TAB ═══ -->
+  <!-- ══�?ORGANIZE TAB ══�?-->
   <div class="tab-content" id="tabOrganize">
     <div style="margin-bottom:20px;text-align:center;display:flex;gap:12px;justify-content:center;align-items:center">
       <button class="btn btn-primary" onclick="startOrganizeScan()" id="orgScanBtn" style="padding:10px 40px;font-size:15px">📁 整理文件</button>
@@ -439,23 +439,22 @@ body {
     </div>
 
     <div class="stats" id="orgStatsArea" style="display:none">
-      <div class="stat-card"><div class="val" id="orgStatTotal">0</div><div class="label">总文件</div></div>
-      <div class="stat-card"><div class="val" id="orgStatCats">0</div><div class="label">分类数</div></div>
-      <div class="stat-card success"><div class="val" id="orgStatSize">0</div><div class="label">总大小</div></div>
-      <div class="stat-card"><div class="val" id="orgStatSelected">0</div><div class="label">已选</div></div>
+      <div class="stat-card"><div class="val" id="orgStatTotal">0</div><div class="label">总文�?/div></div>
+      <div class="stat-card"><div class="val" id="orgStatCats">0</div><div class="label">分类�?/div></div>
+      <div class="stat-card success"><div class="val" id="orgStatSize">0</div><div class="label">总大�?/div></div>
+      <div class="stat-card"><div class="val" id="orgStatSelected">0</div><div class="label">已�?/div></div>
     </div>
 
     <div class="toolbar" id="orgToolbar" style="display:none">
       <div class="toolbar-row">
-        <input class="search-input" id="orgSearchInput" placeholder="🔍 搜索文件名..." oninput="renderCategories()">
+        <input class="search-input" id="orgSearchInput" placeholder="🔍 搜索文件�?.." oninput="renderCategories()">
         <div class="filter-chips" id="orgExtChips"></div>
       </div>
       <div class="toolbar-row">
         <div class="quick-rules">
-          <button class="btn btn-sm" onclick="orgSelectAll()">全选</button>
-          <button class="btn btn-sm" onclick="orgSelectNone()">取消全选</button>
-          <button class="btn btn-sm" onclick="orgSelectCategory()">选中当前分类</button>
-          <span style="font-size:12px;color:var(--text-dim);margin-left:8px">提示：点击分类标题展开/折叠</span>
+          <button class="btn btn-sm" onclick="orgSelectAll()">全�?/button>
+          <button class="btn btn-sm" onclick="orgSelectNone()">取消全�?/button>
+          <span style="font-size:12px;color:var(--text-dim);margin-left:8px">提示：点击分类标题展开/折叠，标题前勾选框选中整个分类</span>
         </div>
       </div>
     </div>
@@ -481,9 +480,9 @@ body {
 <!-- Progress Overlay -->
 <div class="progress-overlay" id="progressOverlay">
   <div class="progress-box">
-    <div style="font-size:16px;font-weight:600" id="progressTitle">扫描中...</div>
+    <div style="font-size:16px;font-weight:600" id="progressTitle">扫描�?..</div>
     <div class="progress-bar"><div class="fill" id="progressFill"></div></div>
-    <div class="progress-text" id="progressText">准备中...</div>
+    <div class="progress-text" id="progressText">准备�?..</div>
   </div>
 </div>
 
@@ -492,7 +491,7 @@ body {
   <div class="progress-box">
     <div style="font-size:16px;font-weight:600" id="opProgressTitle">正在操作...</div>
     <div class="progress-bar"><div class="fill" id="opProgressFill"></div></div>
-    <div class="progress-text" id="opProgressText">准备中...</div>
+    <div class="progress-text" id="opProgressText">准备�?..</div>
   </div>
 </div>
 
@@ -500,7 +499,7 @@ body {
 <div class="modal-overlay" id="deleteModal">
   <div class="modal">
     <h3>确认删除</h3>
-    <div class="desc">将删除 <span id="deleteCount" style="color:var(--danger);font-weight:600">0</span> 个文件到回收站，可恢复。确认继续？</div>
+    <div class="desc">将删�?<span id="deleteCount" style="color:var(--danger);font-weight:600">0</span> 个文件到回收站，可恢复。确认继续？</div>
     <div class="modal-actions">
       <button class="btn" onclick="closeModal('deleteModal')">取消</button>
       <button class="btn btn-danger" onclick="executeDelete()">确认删除</button>
@@ -512,8 +511,8 @@ body {
 <div class="modal-overlay" id="moveModal">
   <div class="modal">
     <h3>移动文件</h3>
-    <div class="desc">将 <span id="moveCount" style="color:var(--accent);font-weight:600">0</span> 个文件移动到指定文件夹。同名文件自动加后缀。</div>
-    <input type="text" id="moveDestInput" placeholder="目标文件夹路径..." style="width:100%;margin-bottom:12px">
+    <div class="desc">�?<span id="moveCount" style="color:var(--accent);font-weight:600">0</span> 个文件移动到指定文件夹。同名文件自动加后缀�?/div>
+    <input type="text" id="moveDestInput" placeholder="目标文件夹路�?.." style="width:100%;margin-bottom:12px">
     <div style="display:flex;gap:8px;margin-bottom:12px">
       <button class="btn btn-sm" onclick="pickMoveDest()">📂 浏览</button>
     </div>
@@ -541,7 +540,7 @@ body {
       <input type="text" id="setApiModel" placeholder="gpt-4o-mini">
     </div>
     <div class="setting-row">
-      <label>最小文件大小 (KB)</label>
+      <label>最小文件大�?(KB)</label>
       <input type="number" id="setMinSize" placeholder="1">
     </div>
     <div class="setting-row">
@@ -553,8 +552,8 @@ body {
     </div>
 
     <div class="setting-section">
-      <h4>📁 整理关键词配置</h4>
-      <div style="font-size:12px;color:var(--text-dim);margin-bottom:12px">每行一个分类，关键词用逗号分隔。文件名包含关键词即归入该分类。</div>
+      <h4>📁 整理关键词配�?/h4>
+      <div style="font-size:12px;color:var(--text-dim);margin-bottom:12px">每行一个分类，关键词用逗号分隔。文件名包含关键词即归入该分类�?/div>
       <div id="keywordRows"></div>
       <button class="btn btn-sm" onclick="addKeywordRow()" style="margin-top:8px">+ 添加分类</button>
     </div>
@@ -641,7 +640,7 @@ function loadConfig(){
 
 function loadFolders(){
   const el = document.getElementById('folderItems');
-  if(el) el.innerHTML = '<div style="color:var(--text-dim);font-size:13px;padding:8px">加载中...</div>';
+  if(el) el.innerHTML = '<div style="color:var(--text-dim);font-size:13px;padding:8px">加载�?..</div>';
   fetch('/api/folders').then(r=>r.json()).then(renderFolders);
 }
 
@@ -660,7 +659,7 @@ function addPreset(path, label){
     body: JSON.stringify({path, label, protected:false})
   }).then(r=>r.json()).then(d=>{
     if(d.error) return toast(d.error, 'error');
-    toast('已添加', 'success');
+    toast('已添�?, 'success');
     loadFolders();
   });
 }
@@ -668,7 +667,7 @@ function addPreset(path, label){
 function renderFolders(folders){
   const el = document.getElementById('folderItems');
   if(!folders.length){
-    el.innerHTML = '<div style="color:var(--text-dim);font-size:13px;padding:8px">暂无文件夹，添加路径开始</div>';
+    el.innerHTML = '<div style="color:var(--text-dim);font-size:13px;padding:8px">暂无文件夹，添加路径开�?/div>';
     return;
   }
   el.innerHTML = folders.map((f,i)=>{
@@ -709,7 +708,7 @@ function pickFolder(){
 function addFolder(){
   const path = document.getElementById('folderPath').value.trim();
   const label = document.getElementById('folderLabel').value.trim();
-  if(!path) return toast('请输入路径', 'error');
+  if(!path) return toast('请输入路�?, 'error');
   fetch('/api/folders', {
     method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({path, label, protected:false})
@@ -717,7 +716,7 @@ function addFolder(){
     if(d.error) return toast(d.error, 'error');
     document.getElementById('folderPath').value='';
     document.getElementById('folderLabel').value='';
-    toast('已添加', 'success');
+    toast('已添�?, 'success');
     loadFolders();
   });
 }
@@ -739,7 +738,7 @@ function toggleFolderPanel(){
   const toggle = document.getElementById('folderToggle');
   folderCollapsed = !folderCollapsed;
   el.classList.toggle('collapsed', folderCollapsed);
-  toggle.textContent = folderCollapsed ? '▸' : '▾';
+  toggle.textContent = folderCollapsed ? '�? : '�?;
 }
 
 // ══════════════════════════════════════════
@@ -748,7 +747,7 @@ function toggleFolderPanel(){
 function startScan(){
   fetch('/api/scan', {method:'POST'}).then(r=>r.json()).then(d=>{
     if(d.error) return toast(d.error, 'error');
-    document.getElementById('progressTitle').textContent = '扫描重复文件中...';
+    document.getElementById('progressTitle').textContent = '扫描重复文件�?..';
     document.getElementById('progressOverlay').classList.add('show');
     pollScan();
   });
@@ -831,7 +830,7 @@ function renderGroups(){
           <span class="meta">×${g.count}</span>
           ${g.is_similar?'<span class="similar-tag">⚠️ 可能不同版本</span>':''}
         </div>
-        <div class="savings">省 ${g.savings_str}</div>
+        <div class="savings">�?${g.savings_str}</div>
       </div>
       ${g.files.map((f,i)=>`
         <div class="file-row">
@@ -918,7 +917,7 @@ function applyQuickRule(rule){
     selectedFiles.clear();
     d.selections.forEach(id=>selectedFiles.add(id));
     renderGroups();
-    toast(`已勾选 ${d.selections.length} 个文件`, 'success');
+    toast(`已勾�?${d.selections.length} 个文件`, 'success');
   });
 }
 
@@ -928,7 +927,7 @@ function applyAI(){
   if(!text) return;
   if(!scanResult) return toast('请先扫描', 'error');
   document.getElementById('aiBtn').disabled = true;
-  document.getElementById('aiBtn').textContent = '分析中...';
+  document.getElementById('aiBtn').textContent = '分析�?..';
   fetch('/api/ai', {
     method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({text, groups: scanResult.groups})
@@ -938,7 +937,7 @@ function applyAI(){
     if(d.error) return toast(d.error, 'error');
     const ue = document.getElementById('aiUnderstanding');
     ue.style.display = 'block';
-    ue.textContent = '🤖 AI理解: ' + (d.understanding || '(无说明)');
+    ue.textContent = '🤖 AI理解: ' + (d.understanding || '(无说�?');
     if(d.selections && Array.isArray(d.selections)){
       selectedFiles.clear();
       d.selections.forEach(id=>selectedFiles.add(id));
@@ -958,7 +957,7 @@ function applyAI(){
 function startOrganizeScan(){
   fetch('/api/organize/scan', {method:'POST'}).then(r=>r.json()).then(d=>{
     if(d.error) return toast(d.error, 'error');
-    document.getElementById('progressTitle').textContent = '整理扫描中...';
+    document.getElementById('progressTitle').textContent = '整理扫描�?..';
     document.getElementById('progressOverlay').classList.add('show');
     pollOrganizeScan();
   });
@@ -1039,16 +1038,22 @@ function renderCategories(){
   }
 
   el.innerHTML = categories.map((c,ci)=>{
-    const selCount = c.files.filter(f=>orgSelectedFiles.has(f.id)).length;
+    const allIds = c.files.filter(f=>!f.protected).map(f=>f.id);
+    const selCount = allIds.filter(id=>orgSelectedFiles.has(id)).length;
+    const allSelected = allIds.length > 0 && selCount === allIds.length;
     return `
     <div class="category-card">
-      <div class="category-header" onclick="toggleCategoryBody(${ci})">
-        <div class="title">
-          <span class="cname">${c.category}</span>
-          <span class="badge">${c.count} 个文件</span>
-          ${selCount>0?`<span class="badge" style="background:rgba(78,138,255,.15);color:var(--accent)">已选 ${selCount}</span>`:''}
+      <div class="category-header">
+        <div class="title" style="display:flex;align-items:center;gap:8px">
+          <input type="checkbox" style="width:18px;height:18px;cursor:pointer;accent-color:var(--accent)"
+            ${allSelected?'checked':''}
+            onchange="toggleCategorySelect(${ci}, this.checked)"
+            onclick="event.stopPropagation()">
+          <span class="cname" style="cursor:pointer" onclick="toggleCategoryBody(${ci})">${c.category}</span>
+          <span class="badge">${c.count} 个文�?/span>
+          ${selCount>0?`<span class="badge" style="background:rgba(78,138,255,.15);color:var(--accent)">已�?${selCount}</span>`:''}
         </div>
-        <div class="size">${c.total_size_str}</div>
+        <div class="size" style="cursor:pointer" onclick="toggleCategoryBody(${ci})">${c.total_size_str}</div>
       </div>
       <div class="category-body" id="catBody_${ci}">
         ${c.files.map(f=>`
@@ -1078,6 +1083,29 @@ function renderCategories(){
 function toggleCategoryBody(idx){
   const el = document.getElementById('catBody_'+idx);
   if(el) el.classList.toggle('expanded');
+}
+
+function toggleCategorySelect(ci, checked){
+  // Get visible categories (same filtering as renderCategories)
+  const search = document.getElementById('orgSearchInput').value.toLowerCase();
+  let categories = [...organizeResult.categories];
+  if(orgCurrentFilter){
+    categories = categories.map(c=>({...c, files:c.files.filter(f=>f.ext===orgCurrentFilter)}))
+                           .filter(c=>c.files.length > 0);
+  }
+  if(search){
+    categories = categories.map(c=>({...c, files:c.files.filter(f=>f.name.toLowerCase().includes(search))}))
+                           .filter(c=>c.files.length > 0);
+  }
+  const cat = categories[ci];
+  if(!cat) return;
+  if(checked){
+    cat.files.forEach(f=>{ if(!f.protected) orgSelectedFiles.add(f.id); });
+  } else {
+    cat.files.forEach(f=>orgSelectedFiles.delete(f.id));
+  }
+  renderCategories();
+  updateActionBar();
 }
 
 function orgFilterExt(el){
@@ -1114,15 +1142,7 @@ function orgSelectNone(){
   updateActionBar();
 }
 
-function orgSelectCategory(){
-  // Select all visible (in current filter) non-protected files
-  document.querySelectorAll('#tabOrganize .file-row input[type=checkbox]').forEach(cb=>{
-    if(!cb.disabled) cb.checked = true;
-    orgSelectedFiles.add(cb.dataset.id);
-  });
-  renderCategories();
-  updateActionBar();
-}
+
 
 // ══════════════════════════════════════════
 // ─── Delete / Move (shared) ───
@@ -1156,7 +1176,7 @@ function executeDelete(){
   function deleteOne(){
     if(idx >= paths.length){
       hideOpProgress();
-      toast(`已删除 ${success} 个文件${failed>0?'，失败 '+failed+' 个':''}`, failed>0?'error':'success');
+      toast(`已删�?${success} 个文�?{failed>0?'，失�?'+failed+' �?:''}`, failed>0?'error':'success');
       if(currentTab==='dedup') removeFilesFromUI(donePaths);
       else removeOrgFilesFromUI(donePaths);
       clearSelections();
@@ -1194,7 +1214,7 @@ function pickMoveDest(){
 function executeMove(){
   const paths = getSelectedPaths();
   const dest = document.getElementById('moveDestInput').value.trim();
-  if(!dest) return toast('请输入目标路径', 'error');
+  if(!dest) return toast('请输入目标路�?, 'error');
   closeModal('moveModal');
   showOpProgress('正在移动...', paths.length);
   let idx = 0, success = 0, failed = 0;
@@ -1202,7 +1222,7 @@ function executeMove(){
   function moveOne(){
     if(idx >= paths.length){
       hideOpProgress();
-      toast(`已移动 ${success} 个文件${failed>0?'，失败 '+failed+' 个':''}`, failed>0?'error':'success');
+      toast(`已移�?${success} 个文�?{failed>0?'，失�?'+failed+' �?:''}`, failed>0?'error':'success');
       if(currentTab==='dedup') removeFilesFromUI(donePaths);
       else removeOrgFilesFromUI(donePaths);
       clearSelections();
@@ -1270,7 +1290,7 @@ function exportData(fmt){
 // ─── Log ───
 function showLog(){
   fetch('/api/log').then(r=>r.text()).then(t=>{
-    document.getElementById('logContent').textContent = t || '(空)';
+    document.getElementById('logContent').textContent = t || '(�?';
     document.getElementById('logModal').classList.add('show');
   });
 }
@@ -1297,7 +1317,7 @@ function renderKeywordRows(keywords){
   const el = document.getElementById('keywordRows');
   el.innerHTML = Object.entries(keywords).map(([cat, kws], i)=>`
     <div class="keyword-row" data-idx="${i}">
-      <input type="text" class="cat-name" value="${cat}" placeholder="分类名">
+      <input type="text" class="cat-name" value="${cat}" placeholder="分类�?>
       <input type="text" class="kw-input" value="${(kws||[]).join(', ')}" placeholder="关键词，逗号分隔">
       <button class="btn btn-sm btn-danger" onclick="this.parentElement.remove()">删除</button>
     </div>
@@ -1309,7 +1329,7 @@ function addKeywordRow(){
   const div = document.createElement('div');
   div.className = 'keyword-row';
   div.innerHTML = `
-    <input type="text" class="cat-name" placeholder="分类名">
+    <input type="text" class="cat-name" placeholder="分类�?>
     <input type="text" class="kw-input" placeholder="关键词，逗号分隔">
     <button class="btn btn-sm btn-danger" onclick="this.parentElement.remove()">删除</button>
   `;
@@ -1346,7 +1366,7 @@ function saveSettings(){
     });
   }).then(()=>{
     closeSettings();
-    toast('设置已保存', 'success');
+    toast('设置已保�?, 'success');
   });
 }
 
