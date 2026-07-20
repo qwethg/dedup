@@ -1,0 +1,1041 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>文件去重 · FileDedup</title>
+<style>
+:root {
+  --bg: #1a1a2e;
+  --surface: #16213e;
+  --surface2: #0f3460;
+  --border: #2a2a4a;
+  --text: #e0e0e0;
+  --text-dim: #8888aa;
+  --accent: #4e8aff;
+  --accent-hover: #6ba0ff;
+  --danger: #ff5555;
+  --danger-hover: #ff7777;
+  --warning: #ffaa33;
+  --success: #50fa7b;
+  --radius: 8px;
+  --shadow: 0 2px 12px rgba(0,0,0,.3);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+  background: var(--bg); color: var(--text); line-height: 1.6;
+  -webkit-font-smoothing: antialiased; min-height: 100vh;
+}
+/* ─── Header ─── */
+.header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 24px; background: var(--surface);
+  border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 100;
+}
+.header h1 { font-size: 18px; font-weight: 600; }
+.header h1 span { color: var(--accent); }
+.header-actions { display: flex; gap: 12px; }
+.btn {
+  padding: 6px 14px; border-radius: var(--radius); border: 1px solid var(--border);
+  background: var(--surface2); color: var(--text); cursor: pointer;
+  font-size: 13px; transition: all .15s;
+}
+.btn:hover { border-color: var(--accent); }
+.btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn-primary:hover { background: var(--accent-hover); }
+.btn-danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+.btn-danger:hover { background: var(--danger-hover); }
+.btn-sm { padding: 4px 10px; font-size: 12px; }
+.btn:disabled { opacity: .4; cursor: not-allowed; }
+
+/* ─── Layout ─── */
+.container { max-width: 1200px; margin: 0 auto; padding: 24px; }
+
+/* ─── Stats ─── */
+.stats {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px;
+}
+.stat-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 16px; text-align: center;
+}
+.stat-card .val { font-size: 24px; font-weight: 700; color: var(--accent); }
+.stat-card .label { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
+.stat-card.danger .val { color: var(--danger); }
+.stat-card.success .val { color: var(--success); }
+
+/* ─── Toolbar ─── */
+.toolbar {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 16px; margin-bottom: 20px;
+}
+.toolbar-row {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.toolbar-row:last-child { margin-bottom: 0; }
+.search-input, .ai-input {
+  flex: 1; min-width: 200px; padding: 8px 12px;
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--radius); color: var(--text); font-size: 14px;
+  outline: none; transition: border-color .15s;
+}
+.search-input:focus, .ai-input:focus { border-color: var(--accent); }
+.filter-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip {
+  padding: 4px 10px; border-radius: 16px; border: 1px solid var(--border);
+  background: var(--bg); font-size: 12px; cursor: pointer; transition: all .15s;
+  color: var(--text-dim);
+}
+.chip.active { border-color: var(--accent); color: var(--accent); background: rgba(78,138,255,.1); }
+.chip:hover { border-color: var(--accent); }
+.select {
+  padding: 6px 10px; background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--radius); color: var(--text); font-size: 13px; outline: none;
+}
+.select option { background: var(--bg); }
+.quick-rules { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.quick-rules-label { font-size: 12px; color: var(--text-dim); margin-right: 4px; }
+.ai-box {
+  display: flex; gap: 8px; align-items: center; margin-top: 10px;
+  padding-top: 10px; border-top: 1px solid var(--border);
+}
+.ai-badge {
+  font-size: 11px; padding: 2px 6px; border-radius: 4px;
+  background: rgba(78,138,255,.15); color: var(--accent); font-weight: 600;
+}
+.ai-understanding {
+  margin-top: 8px; padding: 8px 12px; background: rgba(78,138,255,.08);
+  border: 1px solid rgba(78,138,255,.2); border-radius: var(--radius);
+  font-size: 13px; color: var(--text-dim); display: none;
+}
+
+/* ─── Folder Panel ─── */
+.folder-panel {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); margin-bottom: 20px; overflow: hidden;
+}
+.folder-panel-header {
+  padding: 12px 16px; cursor: pointer; display: flex;
+  justify-content: space-between; align-items: center;
+}
+.folder-panel-header h2 { font-size: 14px; font-weight: 600; }
+.folder-list { padding: 0 16px 16px; }
+.folder-item {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 12px; background: var(--bg); border-radius: 6px;
+  margin-bottom: 6px; font-size: 13px;
+}
+.folder-item .info { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
+.folder-item .label { font-weight: 500; }
+.folder-item .path { color: var(--text-dim); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.folder-item .meta { font-size: 12px; color: var(--text-dim); white-space: nowrap; margin-left: 8px; }
+.folder-item .actions { display: flex; gap: 6px; margin-left: 8px; }
+.protect-badge {
+  font-size: 11px; padding: 1px 5px; border-radius: 4px;
+  background: rgba(255,170,51,.15); color: var(--warning);
+}
+.add-folder-row {
+  display: flex; gap: 8px; padding: 8px 0;
+}
+.add-folder-row input {
+  flex: 1; padding: 6px 10px; background: var(--bg); border: 1px solid var(--border);
+  border-radius: 6px; color: var(--text); font-size: 13px; outline: none;
+}
+.add-folder-row input:focus { border-color: var(--accent); }
+
+/* ─── Group Cards ─── */
+.groups { display: flex; flex-direction: column; gap: 12px; }
+.group-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); overflow: hidden;
+}
+.group-header {
+  padding: 12px 16px; display: flex; align-items: center;
+  justify-content: space-between; background: var(--surface2);
+}
+.group-header .title { display: flex; align-items: center; gap: 8px; }
+.group-header .fname { font-weight: 600; font-size: 14px; }
+.group-header .badge {
+  font-size: 10px; padding: 1px 6px; border-radius: 4px;
+  background: var(--bg); color: var(--text-dim); text-transform: uppercase;
+}
+.group-header .meta { font-size: 12px; color: var(--text-dim); }
+.group-header .savings { color: var(--success); font-weight: 600; font-size: 13px; }
+.similar-tag {
+  font-size: 11px; padding: 1px 6px; border-radius: 4px;
+  background: rgba(255,170,51,.15); color: var(--warning); margin-left: 4px;
+}
+.file-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 16px 8px 40px; border-top: 1px solid var(--border);
+  font-size: 13px; transition: background .1s;
+}
+.file-row:hover { background: rgba(255,255,255,.03); }
+.file-row input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; accent-color: var(--danger); }
+.file-row .f-source {
+  font-size: 11px; padding: 1px 6px; border-radius: 4px;
+  background: var(--bg); color: var(--text-dim); white-space: nowrap;
+}
+.file-row .f-path { color: var(--text-dim); font-size: 12px; flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-row .f-size { color: var(--text-dim); font-size: 12px; white-space: nowrap; }
+.file-row .f-date { color: var(--text-dim); font-size: 12px; white-space: nowrap; width: 110px; }
+.file-row .f-protected { color: var(--warning); font-size: 14px; }
+.file-row .keep-tag {
+  font-size: 11px; padding: 1px 6px; border-radius: 4px;
+  background: rgba(80,250,123,.1); color: var(--success);
+}
+
+/* ─── Action Bar ─── */
+.action-bar {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  background: var(--surface2); border-top: 1px solid var(--accent);
+  padding: 12px 24px; display: none; align-items: center;
+  justify-content: space-between; z-index: 200; box-shadow: 0 -4px 20px rgba(0,0,0,.4);
+}
+.action-bar.show { display: flex; }
+.action-bar .info { font-size: 14px; }
+.action-bar .info .count { font-weight: 700; color: var(--danger); }
+.action-bar .info .size { color: var(--text-dim); margin-left: 8px; }
+.action-bar .actions { display: flex; gap: 8px; }
+
+/* ─── Progress ─── */
+.progress-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.7); z-index: 300;
+  display: none; align-items: center; justify-content: center;
+}
+.progress-overlay.show { display: flex; }
+.progress-box {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 32px; text-align: center; min-width: 300px;
+}
+.progress-bar {
+  height: 6px; background: var(--bg); border-radius: 3px;
+  overflow: hidden; margin: 16px 0;
+}
+.progress-bar .fill {
+  height: 100%; background: var(--accent); width: 0%; transition: width .2s;
+}
+.progress-text { font-size: 13px; color: var(--text-dim); }
+
+/* ─── Modal ─── */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 250;
+  display: none; align-items: center; justify-content: center;
+}
+.modal-overlay.show { display: flex; }
+.modal {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 24px; min-width: 400px; max-width: 500px;
+}
+.modal h3 { margin-bottom: 16px; font-size: 16px; }
+.modal .desc { color: var(--text-dim); font-size: 13px; margin-bottom: 16px; }
+.modal .modal-actions {
+  display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px;
+}
+.modal input[type="text"] {
+  width: 100%; padding: 8px 12px; background: var(--bg);
+  border: 1px solid var(--border); border-radius: 6px; color: var(--text);
+  font-size: 14px; outline: none;
+}
+.modal input[type="text"]:focus { border-color: var(--accent); }
+
+/* ─── Settings ─── */
+.settings-panel {
+  display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6);
+  z-index: 250; align-items: center; justify-content: center;
+}
+.settings-panel.show { display: flex; }
+.settings-box {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 24px; min-width: 450px; max-width: 520px;
+}
+.settings-box h3 { margin-bottom: 16px; }
+.setting-row { margin-bottom: 14px; }
+.setting-row label { display: block; font-size: 13px; color: var(--text-dim); margin-bottom: 4px; }
+.setting-row input, .setting-row select {
+  width: 100%; padding: 8px 12px; background: var(--bg);
+  border: 1px solid var(--border); border-radius: 6px; color: var(--text);
+  font-size: 14px; outline: none;
+}
+.setting-row input:focus, .setting-row select:focus { border-color: var(--accent); }
+
+/* ─── Toast ─── */
+.toast {
+  position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%);
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 10px 20px; font-size: 14px;
+  z-index: 300; opacity: 0; transition: opacity .3s; pointer-events: none;
+}
+.toast.show { opacity: 1; }
+.toast.success { border-color: var(--success); }
+.toast.error { border-color: var(--danger); }
+
+/* ─── Empty state ─── */
+.empty {
+  text-align: center; padding: 60px 20px; color: var(--text-dim);
+}
+.empty .icon { font-size: 48px; margin-bottom: 12px; opacity: .5; }
+.empty .hint { font-size: 13px; margin-top: 8px; }
+
+/* ─── Collapsed ─── */
+.collapsed { display: none !important; }
+
+/* scrollbar */
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>📁 <span>FileDedup</span> 文件去重</h1>
+  <div class="header-actions">
+    <button class="btn btn-sm" onclick="exportData('json')">导出JSON</button>
+    <button class="btn btn-sm" onclick="exportData('csv')">导出CSV</button>
+    <button class="btn btn-sm" onclick="showLog()">日志</button>
+    <button class="btn btn-sm" onclick="showSettings()">⚙️ 设置</button>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- Folder Panel -->
+  <div class="folder-panel">
+    <div class="folder-panel-header" onclick="toggleFolderPanel()">
+      <h2>📁 扫描文件夹</h2>
+      <span id="folderToggle">▾</span>
+    </div>
+    <div class="folder-list" id="folderList">
+      <div class="add-folder-row">
+        <input type="text" id="folderPath" placeholder="粘贴文件夹路径或点浏览...">
+        <input type="text" id="folderLabel" placeholder="标签(可选)" style="max-width:120px">
+        <button class="btn btn-sm" onclick="pickFolder()">📂 浏览</button>
+        <button class="btn btn-sm btn-primary" onclick="addFolder()">添加</button>
+      </div>
+      <div id="presetsRow" style="margin-bottom:8px"></div>
+      <div id="folderItems"></div>
+    </div>
+  </div>
+
+  <!-- Scan Button -->
+  <div style="margin-bottom:20px;text-align:center;display:flex;gap:12px;justify-content:center;align-items:center">
+    <button class="btn btn-primary" onclick="startScan()" id="scanBtn" style="padding:10px 40px;font-size:15px">🔍 开始扫描</button>
+    <button class="btn" onclick="startScan()" id="refreshBtn" style="display:none;padding:10px 20px;font-size:14px">🔄 刷新</button>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats" id="statsArea" style="display:none">
+    <div class="stat-card"><div class="val" id="statTotal">0</div><div class="label">总文件</div></div>
+    <div class="stat-card danger"><div class="val" id="statGroups">0</div><div class="label">重复组</div></div>
+    <div class="stat-card danger"><div class="val" id="statDupFiles">0</div><div class="label">重复文件</div></div>
+    <div class="stat-card success"><div class="val" id="statSavings">0</div><div class="label">可节省</div></div>
+  </div>
+
+  <!-- Toolbar -->
+  <div class="toolbar" id="toolbar" style="display:none">
+    <div class="toolbar-row">
+      <input class="search-input" id="searchInput" placeholder="🔍 搜索文件名..." oninput="renderGroups()">
+      <select class="select" id="sortSelect" onchange="renderGroups()">
+        <option value="savings">可节省空间↓</option>
+        <option value="count">文件数量↓</option>
+        <option value="name">文件名</option>
+        <option value="time">修改时间↓</option>
+      </select>
+      <select class="select" id="modeSelect" onchange="changeMode()">
+        <option value="exact">精确模式 (名+大小)</option>
+        <option value="content">内容模式 (MD5)</option>
+        <option value="similar">相似模式 (同名)</option>
+      </select>
+    </div>
+    <div class="toolbar-row">
+      <div class="filter-chips" id="extChips"></div>
+    </div>
+    <div class="toolbar-row">
+      <div class="quick-rules">
+        <span class="quick-rules-label">快捷规则:</span>
+        <button class="btn btn-sm" onclick="applyQuickRule('keep_newest')">保留最新</button>
+        <button class="btn btn-sm" onclick="applyQuickRule('keep_oldest')">保留最旧</button>
+        <select class="select btn-sm" id="keepLabelSelect" style="font-size:12px">
+          <option value="">保留指定来源...</option>
+        </select>
+        <button class="btn btn-sm" onclick="applyQuickRule('keep_label')">应用</button>
+        <button class="btn btn-sm" onclick="clearSelections()">清空勾选</button>
+      </div>
+    </div>
+    <div class="ai-box">
+      <span class="ai-badge">AI</span>
+      <input class="ai-input" id="aiInput" placeholder="用自然语言描述规则，如：保留企业微信的，删其他的">
+      <button class="btn btn-sm btn-primary" onclick="applyAI()" id="aiBtn">执行</button>
+    </div>
+    <div class="ai-understanding" id="aiUnderstanding"></div>
+  </div>
+
+  <!-- Groups -->
+  <div class="groups" id="groupsArea"></div>
+
+</div>
+
+<!-- Action Bar -->
+<div class="action-bar" id="actionBar">
+  <div class="info">
+    <span class="count" id="selCount">0</span> 个文件待操作
+    <span class="size" id="selSize"></span>
+  </div>
+  <div class="actions">
+    <button class="btn" onclick="clearSelections()">取消</button>
+    <button class="btn btn-primary" onclick="showMoveModal()">移动</button>
+    <button class="btn btn-danger" onclick="confirmDelete()">删除</button>
+  </div>
+</div>
+
+<!-- Progress Overlay -->
+<div class="progress-overlay" id="progressOverlay">
+  <div class="progress-box">
+    <div style="font-size:16px;font-weight:600">扫描中...</div>
+    <div class="progress-bar"><div class="fill" id="progressFill"></div></div>
+    <div class="progress-text" id="progressText">准备中...</div>
+  </div>
+</div>
+
+<!-- Operation Progress Overlay -->
+<div class="progress-overlay" id="opProgressOverlay">
+  <div class="progress-box">
+    <div style="font-size:16px;font-weight:600" id="opProgressTitle">正在操作...</div>
+    <div class="progress-bar"><div class="fill" id="opProgressFill"></div></div>
+    <div class="progress-text" id="opProgressText">准备中...</div>
+  </div>
+</div>
+
+<!-- Delete Confirm Modal -->
+<div class="modal-overlay" id="deleteModal">
+  <div class="modal">
+    <h3>确认删除</h3>
+    <div class="desc">将删除 <span id="deleteCount" style="color:var(--danger);font-weight:600">0</span> 个文件到回收站，可恢复。确认继续？</div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('deleteModal')">取消</button>
+      <button class="btn btn-danger" onclick="executeDelete()">确认删除</button>
+    </div>
+  </div>
+</div>
+
+<!-- Move Modal -->
+<div class="modal-overlay" id="moveModal">
+  <div class="modal">
+    <h3>移动文件</h3>
+    <div class="desc">将 <span id="moveCount" style="color:var(--accent);font-weight:600">0</span> 个文件移动到指定文件夹。同名文件自动加后缀。</div>
+    <input type="text" id="moveDestInput" placeholder="目标文件夹路径..." style="width:100%;margin-bottom:12px">
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('moveModal')">取消</button>
+      <button class="btn btn-primary" onclick="executeMove()">移动</button>
+    </div>
+  </div>
+</div>
+
+<!-- Settings Modal -->
+<div class="settings-panel" id="settingsModal">
+  <div class="settings-box">
+    <h3>⚙️ 设置</h3>
+    <div class="setting-row">
+      <label>API Key (OpenAI 兼容)</label>
+      <input type="text" id="setApiKey" placeholder="sk-...">
+    </div>
+    <div class="setting-row">
+      <label>API Base URL</label>
+      <input type="text" id="setApiBase" placeholder="https://api.openai.com/v1">
+    </div>
+    <div class="setting-row">
+      <label>模型</label>
+      <input type="text" id="setApiModel" placeholder="gpt-4o-mini">
+    </div>
+    <div class="setting-row">
+      <label>最小文件大小 (KB)</label>
+      <input type="number" id="setMinSize" placeholder="1">
+    </div>
+    <div class="setting-row">
+      <label>文件类型</label>
+      <select id="setFileTypes">
+        <option value="work">工作文档 (PDF/DOC/DWG/ZIP...)</option>
+        <option value="all">全部文件</option>
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeSettings()">取消</button>
+      <button class="btn btn-primary" onclick="saveSettings()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Log Modal -->
+<div class="modal-overlay" id="logModal">
+  <div class="modal" style="min-width:600px;max-width:700px">
+    <h3>操作日志</h3>
+    <pre id="logContent" style="max-height:400px;overflow:auto;font-size:12px;background:var(--bg);padding:12px;border-radius:6px;margin-bottom:12px"></pre>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('logModal')">关闭</button>
+      <button class="btn btn-sm" onclick="exportData('log')">导出</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ─── State ───
+let scanResult = null;
+let selectedFiles = new Set();
+let currentFilter = '';
+let folderCollapsed = false;
+
+// ─── Init ───
+document.addEventListener('DOMContentLoaded', () => {
+  loadConfig();
+  loadFolders();
+  loadPresets();
+  // Check if there's a previous result
+  fetch('/api/scan/result').then(r=>r.json()).then(d=>{
+    if(d.groups && d.groups.length>=0 && d.total_files>0){
+      scanResult = d;
+      renderAll();
+    }
+  });
+  // Mode select
+  const cfgMode = localStorage.getItem('scan_mode');
+  if(cfgMode) document.getElementById('modeSelect').value = cfgMode;
+});
+
+function loadConfig(){
+  fetch('/api/config').then(r=>r.json()).then(cfg=>{
+    document.getElementById('modeSelect').value = cfg.scan_mode || 'exact';
+    localStorage.setItem('scan_mode', cfg.scan_mode || 'exact');
+  });
+}
+
+function loadFolders(){
+  const el = document.getElementById('folderItems');
+  if(el) el.innerHTML = '<div style="color:var(--text-dim);font-size:13px;padding:8px">加载中...</div>';
+  fetch('/api/folders').then(r=>r.json()).then(renderFolders);
+}
+
+function loadPresets(){
+  fetch('/api/presets').then(r=>r.json()).then(presets=>{
+    const el = document.getElementById('presetsRow');
+    if(!presets.length){ el.innerHTML=''; return; }
+    el.innerHTML = '<span style="font-size:12px;color:var(--text-dim);margin-right:4px">预设:</span>' +
+      presets.map(p=>`<span class="chip" onclick="addPreset('${p.path}','${p.label}')">${p.label} +</span>`).join('');
+  });
+}
+
+function addPreset(path, label){
+  fetch('/api/folders', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({path, label, protected:false})
+  }).then(r=>r.json()).then(d=>{
+    if(d.error) return toast(d.error, 'error');
+    toast('已添加', 'success');
+    loadFolders();
+  });
+}
+
+function renderFolders(folders){
+  const el = document.getElementById('folderItems');
+  if(!folders.length){
+    el.innerHTML = '<div style="color:var(--text-dim);font-size:13px;padding:8px">暂无文件夹，添加路径开始</div>';
+    return;
+  }
+  el.innerHTML = folders.map((f,i)=>{
+    return `
+    <div class="folder-item" data-path="${f.path}">
+      <div class="info">
+        <span class="label">${f.label}</span>
+        ${f.protected?'<span class="protect-badge">🔒保护</span>':''}
+        <span class="path" title="${f.path}">${f.path}</span>
+        <span class="meta">${f.count} 文件 · ${f.size_str}</span>
+      </div>
+      <div class="actions">
+        <button class="btn btn-sm" data-action="protect" data-idx="${i}">${f.protected?'取消保护':'🔒保护'}</button>
+        <button class="btn btn-sm" data-action="remove" data-idx="${i}">移除</button>
+      </div>
+    </div>`;
+  }).join('');
+  // Bind events
+  el.querySelectorAll('button[data-action]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      const item = e.target.closest('.folder-item');
+      const path = item.dataset.path;
+      const action = e.target.dataset.action;
+      if(action==='remove') removeFolder(path);
+      else if(action==='protect') toggleProtect(path);
+    });
+  });
+}
+
+function pickFolder(){
+  fetch('/api/folders/pick', {method:'POST'})
+    .then(r=>r.json())
+    .then(d=>{
+      if(d.error) return toast(d.error, 'error');
+      if(d.path) document.getElementById('folderPath').value = d.path;
+    });
+}
+
+function addFolder(){
+  const path = document.getElementById('folderPath').value.trim();
+  const label = document.getElementById('folderLabel').value.trim();
+  if(!path) return toast('请输入路径', 'error');
+  fetch('/api/folders', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({path, label, protected:false})
+  }).then(r=>r.json()).then(d=>{
+    if(d.error) return toast(d.error, 'error');
+    document.getElementById('folderPath').value='';
+    document.getElementById('folderLabel').value='';
+    toast('已添加', 'success');
+    loadFolders();
+  });
+}
+
+function removeFolder(path){
+  fetch('/api/folders?path='+encodeURIComponent(path), {method:'DELETE'})
+    .then(r=>r.json()).then(()=>{ loadFolders(); });
+}
+
+function toggleProtect(path){
+  fetch('/api/folders/protect', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({path})
+  }).then(r=>r.json()).then(()=>loadFolders());
+}
+
+function toggleFolderPanel(){
+  const el = document.getElementById('folderList');
+  const toggle = document.getElementById('folderToggle');
+  folderCollapsed = !folderCollapsed;
+  el.classList.toggle('collapsed', folderCollapsed);
+  toggle.textContent = folderCollapsed ? '▸' : '▾';
+}
+
+// ─── Scan ───
+function startScan(){
+  fetch('/api/scan', {method:'POST'}).then(r=>r.json()).then(d=>{
+    if(d.error) return toast(d.error, 'error');
+    document.getElementById('progressOverlay').classList.add('show');
+    pollScan();
+  });
+}
+
+function pollScan(){
+  fetch('/api/scan/status').then(r=>r.json()).then(s=>{
+    const pct = s.total > 0 ? Math.min(100, Math.round(s.progress/s.total*100)) : 0;
+    document.getElementById('progressFill').style.width = pct+'%';
+    document.getElementById('progressText').textContent =
+      `${s.progress} / ${s.total} · ${s.current_path ? s.current_path.split('\\').pop() : ''}`;
+    if(s.scanning){
+      setTimeout(pollScan, 300);
+    } else {
+      document.getElementById('progressOverlay').classList.remove('show');
+      if(s.error){
+        toast(s.error, 'error');
+      } else if(s.has_result){
+        fetchResult();
+      }
+    }
+  });
+}
+
+function fetchResult(){
+  fetch('/api/scan/result').then(r=>r.json()).then(d=>{
+    scanResult = d;
+    renderAll();
+  });
+}
+
+// ─── Render ───
+function renderAll(){
+  if(!scanResult) return;
+  document.getElementById('statsArea').style.display='grid';
+  document.getElementById('toolbar').style.display='block';
+  document.getElementById('refreshBtn').style.display = '';
+  updateStats();
+
+  // Ext chips
+  const exts = {};
+  scanResult.groups.forEach(g=>{
+    exts[g.ext] = (exts[g.ext]||0) + 1;
+  });
+  const chipEl = document.getElementById('extChips');
+  chipEl.innerHTML = '<span class="chip active" data-ext="" onclick="filterExt(this)">全部</span>' +
+    Object.entries(exts).sort((a,b)=>b[1]-a[1]).map(([ext,n])=>
+      `<span class="chip" data-ext="${ext}" onclick="filterExt(this)">${ext.replace('.','').toUpperCase()} (${n})</span>`
+    ).join('');
+
+  // Keep label select
+  const sources = new Set();
+  scanResult.groups.forEach(g=>g.files.forEach(f=>sources.add(f.source.replace('🔒 ',''))));
+  document.getElementById('keepLabelSelect').innerHTML =
+    '<option value="">保留指定来源...</option>' +
+    [...sources].map(s=>`<option value="${s}">${s}</option>`).join('');
+
+  renderGroups();
+}
+
+function renderGroups(){
+  if(!scanResult) return;
+  const search = document.getElementById('searchInput').value.toLowerCase();
+  const sort = document.getElementById('sortSelect').value;
+  let groups = [...scanResult.groups];
+
+  // Filter
+  if(currentFilter){
+    groups = groups.filter(g=>g.ext === currentFilter);
+  }
+  if(search){
+    groups = groups.filter(g=>g.filename.toLowerCase().includes(search));
+  }
+
+  // Sort
+  if(sort==='savings') groups.sort((a,b)=>b.savings-a.savings);
+  else if(sort==='count') groups.sort((a,b)=>b.count-a.count);
+  else if(sort==='name') groups.sort((a,b)=>a.filename.localeCompare(b.filename));
+  else if(sort==='time') groups.sort((a,b)=>b.files[0].mtime-a.files[0].mtime);
+
+  const el = document.getElementById('groupsArea');
+  if(!groups.length){
+    el.innerHTML = '<div class="empty"><div class="icon">🎉</div><div>没有找到重复文件</div></div>';
+    return;
+  }
+
+  el.innerHTML = groups.map(g=>`
+    <div class="group-card">
+      <div class="group-header">
+        <div class="title">
+          <span class="fname">${g.filename}</span>
+          <span class="badge">${g.ext.replace('.','').toUpperCase()}</span>
+          <span class="meta">×${g.count}</span>
+          ${g.is_similar?'<span class="similar-tag">⚠️ 可能不同版本</span>':''}
+        </div>
+        <div class="savings">省 ${g.savings_str}</div>
+      </div>
+      ${g.files.map((f,i)=>`
+        <div class="file-row">
+          <input type="checkbox" data-id="${f.id}" data-path="${f.path}" data-size="${f.size}"
+            ${selectedFiles.has(f.id)?'checked':''}
+            ${f.protected?'style="accent-color:var(--warning)"':''}
+            onchange="toggleSelect(this)">
+          <span class="f-source">${f.source}</span>
+          ${f.protected?'<span class="f-protected">🔒</span>':''}
+          ${i===0?'<span class="keep-tag">建议保留</span>':''}
+          <span class="f-path" title="${f.path}">${f.path}</span>
+          <span class="f-date">${f.mtime_str}</span>
+          <span class="f-size">${formatSize(f.size)}</span>
+        </div>
+      `).join('')}
+    </div>
+  `).join('');
+
+  updateActionBar();
+}
+
+function filterExt(el){
+  document.querySelectorAll('#extChips .chip').forEach(c=>c.classList.remove('active'));
+  el.classList.add('active');
+  currentFilter = el.dataset.ext;
+  renderGroups();
+}
+
+function changeMode(){
+  const mode = document.getElementById('modeSelect').value;
+  fetch('/api/config', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({scan_mode: mode})
+  }).then(()=>{
+    localStorage.setItem('scan_mode', mode);
+    if(scanResult) startScan();
+  });
+}
+
+// ─── Selection ───
+function toggleSelect(cb){
+  const id = cb.dataset.id;
+  if(cb.checked) selectedFiles.add(id);
+  else selectedFiles.delete(id);
+  updateActionBar();
+}
+
+function clearSelections(){
+  selectedFiles.clear();
+  document.querySelectorAll('.file-row input[type=checkbox]').forEach(cb=>cb.checked=false);
+  updateActionBar();
+}
+
+function updateActionBar(){
+  const count = selectedFiles.size;
+  const bar = document.getElementById('actionBar');
+  if(count > 0){
+    bar.classList.add('show');
+    document.getElementById('selCount').textContent = count;
+    // Calc size
+    let size = 0;
+    scanResult.groups.forEach(g=>g.files.forEach(f=>{
+      if(selectedFiles.has(f.id)) size += f.size;
+    }));
+    document.getElementById('selSize').textContent = '· ' + formatSize(size);
+  } else {
+    bar.classList.remove('show');
+  }
+}
+
+// ─── Quick Rules ───
+function applyQuickRule(rule){
+  if(!scanResult) return;
+  const label = document.getElementById('keepLabelSelect').value;
+  fetch('/api/quick_rule', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({rule, groups: scanResult.groups, keep_label: label})
+  }).then(r=>r.json()).then(d=>{
+    selectedFiles.clear();
+    d.selections.forEach(id=>selectedFiles.add(id));
+    renderGroups();
+    toast(`已勾选 ${d.selections.length} 个文件`, 'success');
+  });
+}
+
+// ─── AI ───
+function applyAI(){
+  const text = document.getElementById('aiInput').value.trim();
+  if(!text) return;
+  if(!scanResult) return toast('请先扫描', 'error');
+  document.getElementById('aiBtn').disabled = true;
+  document.getElementById('aiBtn').textContent = '分析中...';
+
+  fetch('/api/ai', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({text, groups: scanResult.groups})
+  }).then(r=>r.json()).then(d=>{
+    document.getElementById('aiBtn').disabled = false;
+    document.getElementById('aiBtn').textContent = '执行';
+    if(d.error) return toast(d.error, 'error');
+
+    // Show understanding
+    const ue = document.getElementById('aiUnderstanding');
+    ue.style.display = 'block';
+    ue.textContent = '🤖 AI理解: ' + (d.understanding || '(无说明)');
+
+    // Apply selections
+    if(d.selections && Array.isArray(d.selections)){
+      selectedFiles.clear();
+      d.selections.forEach(id=>selectedFiles.add(id));
+      renderGroups();
+      toast(`AI 勾选了 ${d.selections.length} 个文件，请确认后操作`, 'success');
+    }
+  }).catch(e=>{
+    document.getElementById('aiBtn').disabled = false;
+    document.getElementById('aiBtn').textContent = '执行';
+    toast('AI请求失败: '+e.message, 'error');
+  });
+}
+
+// ─── Delete / Move ───
+function getSelectedPaths(){
+  const paths = [];
+  scanResult.groups.forEach(g=>g.files.forEach(f=>{
+    if(selectedFiles.has(f.id)) paths.push(f.path);
+  }));
+  return paths;
+}
+
+function confirmDelete(){
+  const paths = getSelectedPaths();
+  document.getElementById('deleteCount').textContent = paths.length;
+  document.getElementById('deleteModal').classList.add('show');
+}
+
+function executeDelete(){
+  const paths = getSelectedPaths();
+  closeModal('deleteModal');
+  showOpProgress('正在删除...', paths.length);
+  let idx = 0, success = 0, failed = 0;
+  const donePaths = [];
+  function deleteOne(){
+    if(idx >= paths.length){
+      hideOpProgress();
+      toast(`已删除 ${success} 个文件${failed>0?'，失败 '+failed+' 个':''}`, failed>0?'error':'success');
+      removeFilesFromUI(donePaths);
+      clearSelections();
+      return;
+    }
+    updateOpProgress(idx, paths.length, paths[idx]);
+    fetch('/api/operate', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({action:'delete', files:[paths[idx]]})
+    }).then(r=>r.json()).then(d=>{
+      if(d.ok && d.success>0){ success++; donePaths.push(paths[idx]); }
+      else failed++;
+      idx++;
+      setTimeout(deleteOne, 10);
+    }).catch(()=>{ failed++; idx++; setTimeout(deleteOne, 10); });
+  }
+  deleteOne();
+}
+
+function showMoveModal(){
+  const paths = getSelectedPaths();
+  document.getElementById('moveCount').textContent = paths.length;
+  document.getElementById('moveModal').classList.add('show');
+}
+
+function executeMove(){
+  const paths = getSelectedPaths();
+  const dest = document.getElementById('moveDestInput').value.trim();
+  if(!dest) return toast('请输入目标路径', 'error');
+  closeModal('moveModal');
+  showOpProgress('正在移动...', paths.length);
+  let idx = 0, success = 0, failed = 0;
+  const donePaths = [];
+  function moveOne(){
+    if(idx >= paths.length){
+      hideOpProgress();
+      toast(`已移动 ${success} 个文件${failed>0?'，失败 '+failed+' 个':''}`, failed>0?'error':'success');
+      removeFilesFromUI(donePaths);
+      clearSelections();
+      return;
+    }
+    updateOpProgress(idx, paths.length, paths[idx]);
+    fetch('/api/operate', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({action:'move', files:[paths[idx]], dest_dir:dest})
+    }).then(r=>r.json()).then(d=>{
+      if(d.ok && d.success>0){ success++; donePaths.push(paths[idx]); }
+      else failed++;
+      idx++;
+      setTimeout(moveOne, 10);
+    }).catch(()=>{ failed++; idx++; setTimeout(moveOne, 10); });
+  }
+  moveOne();
+}
+
+// ─── Export ───
+function exportData(fmt){
+  window.open('/api/export?format='+fmt);
+}
+
+// ─── Log ───
+function showLog(){
+  fetch('/api/log').then(r=>r.text()).then(t=>{
+    document.getElementById('logContent').textContent = t || '(空)';
+    document.getElementById('logModal').classList.add('show');
+  });
+}
+
+// ─── Settings ───
+function showSettings(){
+  fetch('/api/config').then(r=>r.json()).then(cfg=>{
+    document.getElementById('setApiKey').value = cfg.api_key === '***' ? '' : (cfg.api_key||'');
+    document.getElementById('setApiBase').value = cfg.api_base || 'https://api.openai.com/v1';
+    document.getElementById('setApiModel').value = cfg.api_model || 'gpt-4o-mini';
+    document.getElementById('setMinSize').value = cfg.min_size_kb || 1;
+    document.getElementById('setFileTypes').value = cfg.file_types || 'work';
+    document.getElementById('settingsModal').classList.add('show');
+  });
+}
+
+function closeSettings(){
+  document.getElementById('settingsModal').classList.remove('show');
+}
+
+function saveSettings(){
+  const data = {
+    api_key: document.getElementById('setApiKey').value.trim(),
+    api_base: document.getElementById('setApiBase').value.trim(),
+    api_model: document.getElementById('setApiModel').value.trim(),
+    min_size_kb: parseInt(document.getElementById('setMinSize').value)||1,
+    file_types: document.getElementById('setFileTypes').value,
+  };
+  fetch('/api/config', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(data)
+  }).then(r=>r.json()).then(()=>{
+    closeSettings();
+    toast('设置已保存', 'success');
+  });
+}
+
+// ─── Remove operated files from UI (no re-scan) ───
+function removeFilesFromUI(donePaths){
+  if(!donePaths.length || !scanResult) return;
+  const doneSet = new Set(donePaths);
+  // Remove files from groups
+  scanResult.groups.forEach(g=>{
+    g.files = g.files.filter(f=>!doneSet.has(f.path));
+  });
+  // Remove empty groups (groups with <=1 file are no longer duplicates)
+  scanResult.groups = scanResult.groups.filter(g=>g.files.length > 1);
+  // Update stats
+  updateStats();
+  // Re-render
+  renderGroups();
+  // Show refresh button
+  document.getElementById('refreshBtn').style.display = '';
+}
+
+function updateStats(){
+  if(!scanResult) return;
+  scanResult.total_dup_files = scanResult.groups.reduce((s,g)=>s+g.files.length, 0);
+  scanResult.total_groups = scanResult.groups.length;
+  // Recalculate savings
+  let totalSavings = 0;
+  scanResult.groups.forEach(g=>{
+    const minSize = Math.min(...g.files.map(f=>f.size));
+    totalSavings += g.files.reduce((s,f)=>s+f.size, 0) - minSize;
+  });
+  scanResult.total_savings = totalSavings;
+  scanResult.total_savings_str = formatSize(totalSavings);
+  // Update DOM
+  document.getElementById('statTotal').textContent = scanResult.total_files;
+  document.getElementById('statGroups').textContent = scanResult.total_groups;
+  document.getElementById('statDupFiles').textContent = scanResult.total_dup_files;
+  document.getElementById('statSavings').textContent = scanResult.total_savings_str;
+}
+
+// ─── Utils ───
+function showOpProgress(title, total){
+  document.getElementById('opProgressTitle').textContent = title;
+  document.getElementById('opProgressFill').style.width = '0%';
+  document.getElementById('opProgressText').textContent = `0 / ${total}`;
+  document.getElementById('opProgressOverlay').classList.add('show');
+}
+function updateOpProgress(idx, total, path){
+  const pct = Math.round(idx/total*100);
+  document.getElementById('opProgressFill').style.width = pct+'%';
+  document.getElementById('opProgressText').textContent =
+    `${idx} / ${total} · ${path ? path.split('\\').pop() : ''}`;
+}
+function hideOpProgress(){
+  document.getElementById('opProgressOverlay').classList.remove('show');
+}
+
+function formatSize(n){
+  for(const u of ['B','KB','MB','GB','TB']){
+    if(n<1024) return n.toFixed(1)+' '+u;
+    n/=1024;
+  }
+  return (n).toFixed(1)+' PB';
+}
+
+function closeModal(id){
+  document.getElementById(id).classList.remove('show');
+}
+
+function toast(msg, type){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show '+ (type||'');
+  setTimeout(()=>t.classList.remove('show'), 3000);
+}
+</script>
+</body>
+</html>

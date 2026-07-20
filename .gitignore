@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+config.json
+operation_log.txt
+scan_result.json
+dist/
+build/
+*.spec
