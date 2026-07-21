@@ -8,6 +8,7 @@ import sys
 import json
 import hashlib
 import shutil
+import socket
 import stat
 import subprocess
 import re
@@ -48,7 +49,7 @@ def _check_app_token():
     if request.path == '/api/export':
         token = token or request.args.get('token', '')
     if token != APP_TOKEN:
-        return jsonify({"error": "未授权的请求（缺少或错误的本地令牌）"}), 401
+        return jsonify({"error": "本地令牌校验失败：页面已过期或有多个实例在运行，请刷新页面（若仍失败请重启应用）"}), 401
     return None
 
 # ─── Paths ───
@@ -1200,11 +1201,22 @@ def call_ai_chat(cfg, system_prompt, user_prompt, max_tokens=AI_MAX_TOKENS,
             resp_data = json.loads(resp.read().decode('utf-8'))
         return resp_data["choices"][0]["message"]["content"].strip()
 
+    rate_retries = 0  # 限流/排队重试次数，与 400 降级次数分开计
+
+    def _backoff():
+        # 智谱等平台限流时会把请求挂起排队（文档：超并发后新请求被排队），
+        # 表现为 429 或读超时；退避几秒再试通常能等到队列放行
+        time.sleep(8)
+
     for _ in range(3):  # 最多两次降级重试
         try:
             return _do(payload)
         except urllib.error.HTTPError as e:
             body = e.read().decode('utf-8', errors='replace').lower()
+            if e.code == 429 and rate_retries < 2:
+                rate_retries += 1
+                _backoff()
+                continue
             if e.code != 400:
                 raise
             if "temperature" in body and "temperature" in payload:
@@ -1216,6 +1228,19 @@ def call_ai_chat(cfg, system_prompt, user_prompt, max_tokens=AI_MAX_TOKENS,
                 continue
             if use_json_format and "response_format" in payload:
                 payload.pop("response_format")  # 无法确定原因时优先降级 JSON 模式
+                continue
+            raise
+        except (TimeoutError, socket.timeout):
+            if rate_retries < 2:
+                rate_retries += 1
+                _backoff()
+                continue
+            raise
+        except urllib.error.URLError as e:
+            # urlopen 有时把读超时包进 URLError；连接拒绝等真故障不退避，直接抛
+            if isinstance(e.reason, (TimeoutError, socket.timeout)) and rate_retries < 2:
+                rate_retries += 1
+                _backoff()
                 continue
             raise
     raise RuntimeError("AI 请求多次降级后仍失败")
@@ -1390,7 +1415,16 @@ def ai_test():
                         "reply": reply[:80], "saved": True})
     except urllib.error.HTTPError as e:
         body = e.read().decode('utf-8', errors='replace')[:300]
+        if e.code == 429:
+            hint = "请求被限流：免费档模型并发较低，等几秒再点一次即可"
+            return jsonify({"ok": False, "error": f"HTTP 429：{hint}"})
         return jsonify({"ok": False, "error": f"HTTP {e.code}: {body}"})
+    except (TimeoutError, socket.timeout):
+        return jsonify({"ok": False, "error": "连接超时：模型服务可能在排队（限流高峰期），等半分钟再试一次"})
+    except urllib.error.URLError as e:
+        if isinstance(e.reason, (TimeoutError, socket.timeout)):
+            return jsonify({"ok": False, "error": "连接超时：模型服务可能在排队（限流高峰期），等半分钟再试一次"})
+        return jsonify({"ok": False, "error": str(e)})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)})
 
@@ -1803,8 +1837,30 @@ def get_log():
     return Response("(空)", mimetype='text/plain')
 
 
+def _port_in_use(port):
+    """探测端口是否已有实例在监听。
+
+    Windows 的 SO_REUSEADDR 允许多个进程绑定同一端口，请求会被随机分发。
+    每个实例的 APP_TOKEN 不同，多实例并存时页面请求会随机 401。
+    启动前先探测，已有实例就直接打开浏览器并退出，保证单实例。
+    """
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.settimeout(0.5)
+    try:
+        s.connect(('127.0.0.1', port))
+        return True
+    except OSError:
+        return False
+    finally:
+        s.close()
+
+
 def main():
     port = 18739
+    if _port_in_use(port):
+        print(f"已有实例在运行，直接打开界面 http://localhost:{port}")
+        webbrowser.open(f"http://localhost:{port}")
+        return
     print(f"文件整理、清理器服务启动中... http://localhost:{port}")
     # Open browser after slight delay
     def open_browser():
