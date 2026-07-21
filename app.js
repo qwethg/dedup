@@ -274,14 +274,22 @@ function renderAll(){
   renderGroups();
 }
 
-function renderGroups(){
-  if(!scanResult) return;
+// 当前筛选条件下实际可见的重复组（搜索框 + 扩展名筛选 + AI 筛选）。
+// 渲染和快捷规则 / AI 勾选都必须基于这份列表，避免"看着是一部分、操作的是全部"
+function getVisibleGroups(){
+  if(!scanResult) return [];
   const search = document.getElementById('searchInput').value.toLowerCase();
-  const sort = document.getElementById('sortSelect').value;
   let groups = [...scanResult.groups];
   if(currentFilter) groups = groups.filter(g=>g.ext === currentFilter);
   if(aiFilter) groups = groups.filter(g=>g.files.some(matchAiFilter));
   if(search) groups = groups.filter(g=>g.filename.toLowerCase().includes(search));
+  return groups;
+}
+
+function renderGroups(){
+  if(!scanResult) return;
+  const sort = document.getElementById('sortSelect').value;
+  let groups = getVisibleGroups();
   if(sort==='savings') groups.sort((a,b)=>b.savings-a.savings);
   else if(sort==='count') groups.sort((a,b)=>b.count-a.count);
   else if(sort==='name') groups.sort((a,b)=>a.filename.localeCompare(b.filename));
@@ -303,7 +311,7 @@ function renderGroups(){
         </div>
         <div class="savings">省 ${g.savings_str}</div>
       </div>
-      ${(()=>{const anySel=g.files.some(x=>selectedFiles.has(x.id));return g.files.map((f,i)=>`
+      ${g.files.map((f,i)=>`
         <div class="file-row">
           <input type="checkbox" data-id="${f.id}" data-path="${f.path}" data-size="${f.size}"
             ${selectedFiles.has(f.id)?'checked':''}
@@ -311,7 +319,7 @@ function renderGroups(){
             onchange="toggleSelect(this)">
           <span class="f-source">${f.source}</span>
           ${f.protected?'<span class="f-protected"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></span>':''}
-          ${anySel?(selectedFiles.has(f.id)?'<span class="del-tag">将删除</span>':'<span class="keep-tag">将保留</span>'):(i===0?'<span class="keep-tag">建议保留</span>':'')}
+          ${selectedFiles.has(f.id)?'<span class="del-tag">将删除</span>':''}
           <span class="f-path" title="${f.path}">${f.path}</span>
           <span class="f-date">${f.mtime_str}</span>
           <span class="f-size">${formatSize(f.size)}</span>
@@ -321,7 +329,7 @@ function renderGroups(){
             <button class="f-act-btn f-act-del" title="删除（移至回收站）" data-path="${f.path}" onclick="deleteSingleFile(this)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg></button>
           </span>
         </div>
-      `).join('')})()}
+      `).join('')}
     </div>
   `).join('');
   updateActionBar();
@@ -354,19 +362,15 @@ function toggleSelect(cb){
   updateActionBar();
 }
 
-// 组内勾选状态变化后，就地更新「建议保留 / 将保留 / 将删除」标记
+// 组内勾选状态变化后，就地更新「将删除」标记：勾选即显示，取消 / 清空即消失
 function refreshRowTags(card){
   if(!card) return;
-  const rows = [...card.querySelectorAll('.file-row')];
-  const anySel = rows.some(r=>r.querySelector('input[type=checkbox]').checked);
-  rows.forEach((r,i)=>{
+  card.querySelectorAll('.file-row').forEach(r=>{
     const old = r.querySelector('.keep-tag,.del-tag');
     if(old) old.remove();
-    const checked = r.querySelector('input[type=checkbox]').checked;
-    let html = '';
-    if(anySel) html = checked ? '<span class="del-tag">将删除</span>' : '<span class="keep-tag">将保留</span>';
-    else if(i===0) html = '<span class="keep-tag">建议保留</span>';
-    if(html) r.querySelector('.f-path').insertAdjacentHTML('beforebegin', html);
+    if(r.querySelector('input[type=checkbox]').checked){
+      r.querySelector('.f-path').insertAdjacentHTML('beforebegin', '<span class="del-tag">将删除</span>');
+    }
   });
 }
 
@@ -404,9 +408,11 @@ function clearSelections(){
     aiBatches = [];
     renderAiUnderstanding();
     document.querySelectorAll('#tabDedup .file-row input[type=checkbox]').forEach(cb=>cb.checked=false);
+    document.querySelectorAll('#tabDedup .group-card').forEach(refreshRowTags);
   } else {
     orgSelectedFiles.clear();
-    document.querySelectorAll('#tabOrganize .file-row input[type=checkbox]').forEach(cb=>cb.checked=false);
+    // 重新渲染，分类标题的勾选框和「已选 N」徽标一并复位
+    renderCategories();
   }
   updateActionBar();
 }
@@ -437,13 +443,17 @@ function applyQuickRule(rule){
     if(!label) return toast('请先在下拉框中选择要保留的来源', 'error');
     localStorage.setItem('keep_label', label);
   }
+  const visibleGroups = getVisibleGroups();
+  if(!visibleGroups.length) return toast('当前筛选条件下没有重复组', 'error');
   api('/api/quick_rule', {
     method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({rule, groups: scanResult.groups, keep_label: label})
+    body: JSON.stringify({rule, groups: visibleGroups, keep_label: label})
   }).then(r=>r.json()).then(d=>{
     selectedFiles.clear();
     d.selections.forEach(id=>selectedFiles.add(id));
     renderGroups();
+    const scoped = visibleGroups.length < scanResult.groups.length
+      ? `（仅作用于筛选出的 ${visibleGroups.length} 组）` : '';
     if(rule==='keep_label'){
       const skipped = d.groups_skipped || 0;
       if(!d.selections.length){
@@ -452,12 +462,12 @@ function applyQuickRule(rule){
           ? `所有重复组里都没有来源「${label}」的文件，未勾选任何文件`
           : `各重复组均只包含「${label}」的文件，没有可清理的副本`, 'error');
       } else {
-        toast(`已勾选 ${d.selections.length} 个文件（保留「${label}」）` +
-          (skipped > 0 ? `；${skipped} 个组不含该来源，已整组跳过` : ''), 'success');
+        toast(`已勾选 ${d.selections.length} 个待删文件（保留「${label}」）` +
+          (skipped > 0 ? `；${skipped} 个组不含该来源，已整组跳过` : '') + scoped, 'success');
       }
     } else {
       const kept = {keep_newest:'每组保留最新的 1 个', keep_oldest:'每组保留最旧的 1 个'}[rule] || '';
-      toast(`已勾选 ${d.selections.length} 个待删文件（${kept}）`, 'success');
+      toast(`已勾选 ${d.selections.length} 个待删文件（${kept}）${scoped}`, 'success');
     }
   });
 }
@@ -491,12 +501,14 @@ function applyAI(){
   const text = document.getElementById('aiInput').value.trim();
   if(!text) return;
   if(!scanResult) return toast('请先扫描', 'error');
+  const visibleGroups = getVisibleGroups();
+  if(!visibleGroups.length) return toast('当前筛选条件下没有重复组', 'error');
   const btn = document.getElementById('aiBtn');
   btn.disabled = true;
   btn.textContent = '分析中...';
   api('/api/ai', {
     method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({text, groups: scanResult.groups})
+    body: JSON.stringify({text, groups: visibleGroups})
   }).then(r=>r.json()).then(d=>{
     btn.disabled = false;
     btn.textContent = 'AI 勾选';
@@ -689,21 +701,26 @@ function renderOrganizeAll(){
   renderCategories();
 }
 
-function renderCategories(){
-  if(!organizeResult) return;
+// 当前筛选条件下实际可见的分类（搜索框 + 扩展名筛选）。
+// 渲染、分类全选、全局全选都必须基于这份列表
+function getVisibleCategories(){
+  if(!organizeResult) return [];
   const search = document.getElementById('orgSearchInput').value.toLowerCase();
   let categories = [...organizeResult.categories];
-
-  // Filter by ext
   if(orgCurrentFilter){
     categories = categories.map(c=>({...c, files:c.files.filter(f=>f.ext===orgCurrentFilter)}))
                            .filter(c=>c.files.length > 0);
   }
-  // Filter by search
   if(search){
     categories = categories.map(c=>({...c, files:c.files.filter(f=>f.name.toLowerCase().includes(search))}))
                            .filter(c=>c.files.length > 0);
   }
+  return categories;
+}
+
+function renderCategories(){
+  if(!organizeResult) return;
+  const categories = getVisibleCategories();
 
   const el = document.getElementById('categoriesArea');
   if(!categories.length){
@@ -765,18 +782,7 @@ function toggleCategoryBody(idx){
 }
 
 function toggleCategorySelect(ci, checked){
-  // Get visible categories (same filtering as renderCategories)
-  const search = document.getElementById('orgSearchInput').value.toLowerCase();
-  let categories = [...organizeResult.categories];
-  if(orgCurrentFilter){
-    categories = categories.map(c=>({...c, files:c.files.filter(f=>f.ext===orgCurrentFilter)}))
-                           .filter(c=>c.files.length > 0);
-  }
-  if(search){
-    categories = categories.map(c=>({...c, files:c.files.filter(f=>f.name.toLowerCase().includes(search))}))
-                           .filter(c=>c.files.length > 0);
-  }
-  const cat = categories[ci];
+  const cat = getVisibleCategories()[ci];
   if(!cat) return;
   if(checked){
     cat.files.forEach(f=>{ if(!f.protected) orgSelectedFiles.add(f.id); });
@@ -808,11 +814,15 @@ function updateOrgStats(){
 
 function orgSelectAll(){
   if(!organizeResult) return;
-  organizeResult.categories.forEach(c=>c.files.forEach(f=>{
+  const visible = getVisibleCategories();
+  visible.forEach(c=>c.files.forEach(f=>{
     if(!f.protected) orgSelectedFiles.add(f.id);
   }));
   renderCategories();
   updateActionBar();
+  const scoped = visible.length < organizeResult.categories.length
+    ? `（仅作用于筛选出的 ${visible.length} 个分类）` : '';
+  toast(`已选 ${orgSelectedFiles.size} 个文件${scoped}`, 'success');
 }
 
 function orgSelectNone(){
@@ -1076,7 +1086,7 @@ function updateStats(){
   scanResult.total_groups = scanResult.groups.length;
   let totalSavings = 0;
   scanResult.groups.forEach(g=>{
-    // files[0] is the oldest copy = the one marked 建议保留 (matches backend)
+    // files[0] is the oldest copy; savings is estimated against keeping it
     totalSavings += g.files.reduce((s,f)=>s+f.size, 0) - g.files[0].size;
   });
   scanResult.total_savings = totalSavings;
