@@ -166,5 +166,34 @@ check("log written", "MOVE" in log_lines and "a.txt" in log_lines)
 app.LOG_PATH = log_path_bak
 app.CONFIG_PATH = test_cfg_path
 
+# ── 10. quick_rule keep_label: 保底与统计 ──
+print("[10] quick_rule keep_label safety")
+def _f(fid, source, protected=False, mtime=1):
+    return {"id": fid, "source": source, "protected": protected, "mtime": mtime}
+groups_qr = [
+    # 组1：微信 + 企业微信 -> 保留微信，勾选企业微信
+    {"files": [_f("a1", "微信:xwechat_files"), _f("a2", "企业微信:wxwork")]},
+    # 组2：全部来自微信 -> 无可勾选
+    {"files": [_f("b1", "微信:xwechat_files"), _f("b2", "微信:xwechat_files")]},
+    # 组3：组内没有微信 -> 整组跳过（旧逻辑会把整组全部勾选，危险）
+    {"files": [_f("c1", "企业微信:wxwork"), _f("c2", "其他")]},
+    # 组4：对方来源是受保护文件 -> 不勾选
+    {"files": [_f("d1", "微信:xwechat_files"), _f("d2", "企业微信:wxwork", protected=True)]},
+]
+sel, stats = app.quick_rule_selections("keep_label", groups_qr, "微信:xwechat_files")
+check("keep_label selects only non-kept-source, non-protected", sel == ["a2"])
+check("groups_applied counts groups containing the source", stats["groups_applied"] == 3)
+check("group without the source is skipped entirely", stats["groups_skipped"] == 1)
+sel_amb, stats_amb = app.quick_rule_selections("keep_label", groups_qr, "微信")
+check("exact match: '微信' does NOT match '企业微信' or '微信:xwechat_files'",
+      sel_amb == [] and stats_amb["groups_skipped"] == 4)
+sel2, stats2 = app.quick_rule_selections("keep_label", groups_qr, "不存在的来源")
+check("unknown source selects nothing", sel2 == [] and stats2["groups_skipped"] == 4)
+sel3, stats3 = app.quick_rule_selections("keep_label", groups_qr, "")
+check("empty keep_label selects nothing", sel3 == [] and stats3["groups_skipped"] == 0)
+sel4, _ = app.quick_rule_selections("keep_newest",
+    [{"files": [_f("e1", "A", mtime=1), _f("e2", "B", mtime=2)]}])
+check("keep_newest still works", sel4 == ["e1"])
+
 print(f"\n{passed} passed, {failed} failed")
 sys.exit(1 if failed else 0)

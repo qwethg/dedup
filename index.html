@@ -4,22 +4,29 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>归置檔 · Dedup</title>
+<script>window.__APP_TOKEN__ = "{{APP_TOKEN}}";</script>
 <link rel="stylesheet" href="/style.css?v=3">
 </head>
 <body>
 
 <div class="header">
-  <h1>归置檔<span class="wordmark-en">DEDUP</span></h1>
+  <h1>归置檔<span class="wordmark-en">DEDUP</span><span class="wordmark-sub">本地文件去重与整理</span></h1>
   <div class="header-actions">
     <div class="theme-switcher">
       <button class="theme-dot" data-theme-choice="cinnabar" style="--dot:#c8432b" title="朱砂"></button>
       <button class="theme-dot" data-theme-choice="indigo" style="--dot:#2e4756" title="玄青"></button>
       <button class="theme-dot" data-theme-choice="pine" style="--dot:#3f6b4f" title="墨绿"></button>
     </div>
-    <button class="btn btn-sm" onclick="exportData('json')">导出 JSON</button>
-    <button class="btn btn-sm" onclick="exportData('csv')">导出 CSV</button>
+    <div class="export-wrap">
+      <button class="btn btn-sm" onclick="toggleExportMenu(event)">导出 ▾</button>
+      <div class="export-menu" id="exportMenu">
+        <div class="export-item" onclick="exportData('json')">导出 JSON</div>
+        <div class="export-item" onclick="exportData('csv')">导出 CSV</div>
+      </div>
+    </div>
     <button class="btn btn-sm" onclick="showLog()">日志</button>
     <button class="btn btn-sm" onclick="showSettings()">设置</button>
+    <button class="btn btn-sm" onclick="showHelp()">帮助</button>
   </div>
 </div>
 
@@ -38,7 +45,9 @@
         <button class="btn btn-sm" onclick="pickFolder()">浏览</button>
         <button class="btn btn-sm btn-primary" onclick="addFolder()">添加</button>
       </div>
-      <div id="presetsRow" style="margin-bottom:8px"></div>
+      <div id="presetsRow" style="margin-bottom:8px">
+        <button class="btn btn-sm" onclick="autodetectFolders()">一键扫描添加微信 / 企业微信文件夹</button>
+      </div>
       <div id="folderItems"></div>
     </div>
   </div>
@@ -86,17 +95,31 @@
           <span class="quick-rules-label">快捷规则</span>
           <button class="btn btn-sm" onclick="applyQuickRule('keep_newest')">保留最新</button>
           <button class="btn btn-sm" onclick="applyQuickRule('keep_oldest')">保留最旧</button>
-          <select class="select btn-sm" id="keepLabelSelect" style="font-size:12px">
+          <select class="select btn-sm" id="keepLabelSelect" style="font-size:12px"
+            onchange="applyKeepSource()"
+            title="选择后立即勾选：每组中保留该来源的文件，其余勾选删除；组内没有该来源的整组跳过">
             <option value="">保留指定来源…</option>
           </select>
-          <button class="btn btn-sm" onclick="applyQuickRule('keep_label')">应用</button>
+          <button class="btn btn-sm" onclick="applyQuickRule('keep_label')"
+            title="手动改动勾选后，点此按当前来源重新勾选">应用</button>
           <button class="btn btn-sm" onclick="clearSelections()">清空勾选</button>
         </div>
       </div>
       <div class="ai-box">
         <span class="ai-badge">AI</span>
-        <input class="ai-input" id="aiInput" placeholder="用自然语言描述规则，如：保留企业微信的，删其他的">
-        <button class="btn btn-sm btn-primary" onclick="applyAI()" id="aiBtn">执行</button>
+        <input class="ai-input" id="aiInput" placeholder="用自然语言描述规则（AI 勾选）或条件（筛选），如：保留企业微信的，删其他的">
+        <span class="tooltip-wrap">
+          <button class="btn btn-sm btn-primary" onclick="applyAI()" id="aiBtn">AI 勾选</button>
+          <span class="tooltip-text">把重复组摘要（文件名 / 来源 / 大小 / 日期，<b>默认不发路径</b>）发给 AI，把自然语言转成勾选规则，服务端强制校验后才勾选——保护文件不会被勾、每组保底留一个，勾选后可一键撤销。<br><br>
+<b>成本预估（以 kimi-k2.6 为例，单次点击）</b><br>
+· 20 组以内 ≈ ¥0.05–0.1<br>
+· 60 组（单次上限）≈ ¥0.15–0.3<br>
+超过 60 组只处理前 60 组，可分次操作。在设置中开启"发送完整文件路径"会增加约 30–50% 输入成本。实际以 API 控制台账单为准。</span>
+        </span>
+        <span class="tooltip-wrap">
+          <button class="btn btn-sm" onclick="applyAIFilter()" id="aiFilterBtn">筛选</button>
+          <span class="tooltip-text">把自然语言条件（如"只看 2024 年大于 50MB 的 PDF"）转成筛选条件，<b>只过滤显示</b>的重复组，不改变勾选和扫描数据。消耗极小（单次不足 ¥0.01）。</span>
+        </span>
       </div>
       <div class="ai-understanding" id="aiUnderstanding"></div>
     </div>
@@ -128,6 +151,16 @@
           <button class="btn btn-sm" onclick="orgSelectAll()">全选</button>
           <button class="btn btn-sm" onclick="orgSelectNone()">取消全选</button>
           <button class="btn btn-sm btn-primary" onclick="showArchiveModal()">按分类归档…</button>
+          <span class="tooltip-wrap">
+            <button class="btn btn-sm" onclick="aiClassifyOthers()" id="aiClassifyBtn">AI 智能分类</button>
+            <span class="tooltip-text">把「其他」类文件的<b>文件名</b>分批（每批 50 个）发给 AI，按语义归入已有分类或新建分类；不发路径，保护隐私。<br><br>
+<b>成本预估（以 kimi-k2.6 为例）</b><br>
+每批约 2K tokens 输入 + 2K tokens 输出（含推理），约 ¥0.05–0.10 / 批。<br>
+· 100 个「其他」文件 ≈ 2 批 ≈ ¥0.1–0.2<br>
+· 500 个「其他」文件 ≈ 10 批 ≈ ¥0.5–1<br>
+· 1000 个「其他」文件 ≈ 20 批 ≈ ¥1–2<br>
+（kimi-k2.6：输入 $0.95 / 输出 $4.00 每百万 tokens，缓存命中更便宜；实际以 API 控制台账单为准。换用更便宜的模型可进一步降本。）</span>
+          </span>
           <span style="font-size:12px;color:var(--text-dim);margin-left:8px">点击分类标题展开 / 折叠，标题前勾选框选中整个分类</span>
         </div>
       </div>
@@ -158,6 +191,7 @@
     <div class="progress-bar"><div class="fill" id="progressFill"></div></div>
     <div class="progress-text" id="progressText">准备中…</div>
     <button class="btn btn-sm" id="cancelScanBtn" style="margin-top:14px">取消扫描</button>
+    <button class="btn btn-sm btn-danger" id="forceStopAiBtn" style="margin-top:14px;margin-left:8px;display:none" onclick="forceStopAiClassify()">强行停止</button>
   </div>
 </div>
 
@@ -170,6 +204,29 @@
   </div>
 </div>
 
+<!-- First-run Disclaimer Modal（仅首次打开显示，必须确认） -->
+<div class="modal-overlay" id="disclaimerModal">
+  <div class="modal">
+    <div style="text-align:center">
+      <div style="font-family:var(--font-serif);font-size:22px;font-weight:700;letter-spacing:3px">归置檔<span style="font-family:var(--font-mono);font-size:11px;font-weight:500;letter-spacing:3px;color:var(--text-dim);margin-left:10px">DEDUP</span></div>
+      <div class="desc" style="margin-top:12px;line-height:1.8">
+        本地文件去重与整理工具。<br>
+        找出重复的文件，保留需要的，清理其余的。<br>
+        一切都在你的电脑上完成，文件不会上传。
+      </div>
+    </div>
+    <hr style="border:none;border-top:1px solid var(--border);margin:18px 0">
+    <div class="desc" style="line-height:1.9">
+      删除、移动文件<b style="color:var(--danger)">存在丢失风险</b>。<br>
+      尤其是经 AI 勾选后，<b>务必确认勾选结果再执行</b>。<br>
+      建议先删除到回收站，确认无误后再清空。
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-primary" onclick="acceptDisclaimer()">我已了解，开始使用</button>
+    </div>
+  </div>
+</div>
+
 <!-- Delete Confirm Modal -->
 <div class="modal-overlay" id="deleteModal">
   <div class="modal">
@@ -178,6 +235,19 @@
     <div class="modal-actions">
       <button class="btn" onclick="closeModal('deleteModal')">取消</button>
       <button class="btn btn-danger" onclick="executeDelete()">确认删除</button>
+    </div>
+  </div>
+</div>
+
+<!-- Single File Delete Modal（行内删除按钮） -->
+<div class="modal-overlay" id="singleDeleteModal">
+  <div class="modal">
+    <h3>删除文件</h3>
+    <div class="desc">将删除以下文件到回收站（可恢复）：</div>
+    <div class="desc" id="singleDeletePath" style="word-break:break-all;font-size:12px;color:var(--text-dim);margin-top:-6px;max-height:80px;overflow:auto"></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('singleDeleteModal')">取消</button>
+      <button class="btn btn-danger" onclick="confirmSingleDelete()">删除</button>
     </div>
   </div>
 </div>
@@ -231,6 +301,23 @@
       <input type="text" id="setApiModel" placeholder="gpt-4o-mini">
     </div>
     <div class="setting-row">
+      <label>发送完整文件路径给 AI</label>
+      <div style="display:flex;align-items:center;gap:8px">
+        <input type="checkbox" id="setAiSendPaths" style="width:16px;height:16px;accent-color:var(--accent)">
+        <span style="font-size:12px;color:var(--text-dim)">默认关闭：只发送文件名 / 来源 / 大小 / 日期，保护路径隐私</span>
+      </div>
+    </div>
+    <div class="setting-row">
+      <label>连接测试</label>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="btn btn-sm" onclick="testAIConnection()">测试连接</button>
+        <span id="aiTestResult" style="font-size:12px;color:var(--text-dim)"></span>
+      </div>
+      <div style="font-size:12px;color:var(--text-dim);margin-top:6px">
+        支持本地模型完全离线使用：Ollama 填 <code>http://localhost:11434/v1</code>，LM Studio 填 <code>http://localhost:1234/v1</code>（本地服务 API Key 可填任意非空值）
+      </div>
+    </div>
+    <div class="setting-row">
       <label>最小文件大小（KB）</label>
       <input type="number" id="setMinSize" placeholder="1">
     </div>
@@ -264,7 +351,78 @@
     <pre id="logContent" style="max-height:400px;overflow:auto;font-size:12px;font-family:var(--font-mono);background:var(--bg);padding:14px;border-radius:5px;margin-bottom:12px;border:1px solid var(--border)"></pre>
     <div class="modal-actions">
       <button class="btn" onclick="closeModal('logModal')">关闭</button>
+      <button class="btn btn-sm btn-danger" onclick="clearLog(this)">清空</button>
       <button class="btn btn-sm" onclick="exportData('log')">导出</button>
+    </div>
+  </div>
+</div>
+
+<!-- Help Modal -->
+<div class="modal-overlay" id="helpModal">
+  <div class="modal help-modal">
+    <div class="help-head">
+      <div class="help-title">归置檔<span class="en">DEDUP</span></div>
+      <div class="help-sub">本地文件去重与整理</div>
+    </div>
+    <div class="help-body">
+
+      <div class="help-sec">
+        <div class="help-label"><span class="no">01</span>它能做什么</div>
+        <p>电脑用久了，同一个文件总会出现在好几个地方。微信里收一份，下载文件夹躺一份，桌面还有一份。</p>
+        <p>归置檔做的，就是把它们找出来——留一份，清掉其余的。也可以反过来，把散在各处的文件按类别收拢到一起。</p>
+        <p>所有事都在本机完成，文件不出门。</p>
+      </div>
+
+      <div class="help-sec">
+        <div class="help-label"><span class="no">02</span>两件事</div>
+        <p><b>重复清理。</b>按内容把相同的文件分成一组一组，你勾掉多余的副本。默认的精确模式最严格；想查「名字不同、内容一样」的，换内容模式；想认出「副本」「(1)」这类，用相似模式。</p>
+        <p style="margin-top:8px"><b>文件整理。</b>按文件名关键词自动归类，勾好之后一键归档到目标文件夹。实在分不进的「其他」，可以让 AI 看着文件名帮忙归一归。</p>
+      </div>
+
+      <div class="help-sec">
+        <div class="help-label"><span class="no">03</span>上手</div>
+        <ol class="help-steps">
+          <li>添加要扫描的文件夹。微信、企业微信的目录可以一键识别。</li>
+          <li>点「扫描重复文件」或「整理文件」，等它跑完。</li>
+          <li>用快捷规则勾：保留最新、保留最旧，或保留某个来源。也可以一组一组自己挑。</li>
+          <li>底部操作栏选「移动」或「删除」。移动遇到同名自动加后缀，删除进回收站。</li>
+          <li>结果能导出 JSON / CSV。做过的事，日志里都记着。</li>
+        </ol>
+      </div>
+
+      <div class="help-sec">
+        <div class="help-label"><span class="no">04</span>AI 这事</div>
+        <p>AI 是选配，不填也不影响基本使用。</p>
+        <p>在设置里填一个 OpenAI 兼容的 API 就行。之后可以用大白话让它勾——「保留企业微信的，删其他的」；可以让它按条件筛选；整理页的「其他」也能交给它分类。同一批结果可以连续点好几次，它会接着上次的继续勾，随时能逐次撤销。</p>
+        <p>默认只发文件名、来源、大小、日期，不发完整路径。介意的话，接 Ollama 或 LM Studio 的本地模型，完全离线。每次大概花多少 token，按钮上悬停有预估，通常是几分钱的事。</p>
+      </div>
+
+      <div class="help-sec">
+        <div class="help-label"><span class="no">05</span>几条底线</div>
+        <ul class="help-list">
+          <li>删除一律进回收站，能反悔。</li>
+          <li>每组至少留一个，删不光。</li>
+          <li>文件夹可以标成受保护，里面的文件不会被勾，也不会被碰。</li>
+          <li>AI 勾的结果先过服务端校验才生效，也能一键撤销。</li>
+          <li>同名文件不覆盖，自动加后缀。</li>
+        </ul>
+      </div>
+
+      <div class="help-sec">
+        <div class="help-label"><span class="no">06</span>一些提醒</div>
+        <ul class="help-list">
+          <li>AI 勾完，自己再扫一眼。它快，但判断是你的。</li>
+          <li>大文件夹扫起来慢，设置里限定文件类型和最小大小，会快不少。</li>
+          <li>扫描的时候别去动扫描目录里的文件，结果会失真。</li>
+          <li><b>config.json</b> 和日志都在程序旁边，换电脑之前记得带上。</li>
+          <li>关掉那个黑色控制台窗口，服务就停了。</li>
+        </ul>
+        <div class="help-note">删文件这事，说到底有风险。回收站给你留了一条回头路——先删，确认没问题，再清空。</div>
+      </div>
+
+    </div>
+    <div class="help-foot">
+      <button class="btn btn-primary" onclick="closeModal('helpModal')">关闭</button>
     </div>
   </div>
 </div>
@@ -290,3 +448,5 @@
 })();
 </script>
 <script src="/app.js"></script>
+</body>
+</html>
